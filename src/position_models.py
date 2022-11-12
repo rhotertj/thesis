@@ -2,7 +2,6 @@
 
 import math
 import torch
-import numpy as np
 from torch import nn
 
 # Adapted from https://github.com/airalcorn2/baller2vec/blob/master/baller2vec.py
@@ -28,6 +27,7 @@ class Baller2Vec(nn.Module):
         dim_feedforward : int,
         num_layers : int,
         dropout : float,
+        head : nn.Module = None,
     ):
         """Initialize input embedding, transformer and classifier.
 
@@ -46,12 +46,11 @@ class Baller2Vec(nn.Module):
 
         self.seq_len = seq_len
         self.n_players = n_players
-        initrange = 0.1
 
         # Initialize preprocessing MLPs.
         # Extra dimensions for (x, y) coordinates and hoop side (for players) or z
         # coordinate (for ball).
-        # (T x 11 + 11 + 1 x 2) => T * 23 x d_model
+        # (T * 11 + 11 + 1 x 2) => T * 23 x d_model
 
         in_feats = 3 # x, y, z or x, y, side
         input_mlp = nn.Sequential()
@@ -72,27 +71,23 @@ class Baller2Vec(nn.Module):
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers)
 
-        # Initialize classification layers.
-        # HEAD
-        self.player_classifier = nn.Linear(d_model, n_player_labels)
-        self.player_classifier.weight.data.uniform_(-initrange, initrange)
-        self.player_classifier.bias.data.zero_()
-
-        self.ball_classifier = nn.Linear(d_model, n_ball_labels)
-        self.ball_classifier.weight.data.uniform_(-initrange, initrange)
-        self.ball_classifier.bias.data.zero_()
+        # Initialize head.
+        if head == None:
+            self.head = default_head(d_model, n_player_labels, n_ball_labels)
+        else:
+            self.head = head
 
         # Initialize mask.
         self.register_buffer("mask", self.generate_self_attn_mask())
 
-    def generate_self_attn_mask(self) -> np.ndarray:
+    def generate_self_attn_mask(self) -> torch.tensor:
         """Generate the attention mask for the transformer to prevent peeking into the future.
 
         Expects SequenceLength * (NPlayers + Ball) x Hidden Dim
         Assumes [T * Player Feats, T * Ball Feats] 
 
         Returns:
-            np.ndarray: The mask.
+            torch.tensor: The mask.
         """
 
         sz = (self.n_players + 1) * self.seq_len
@@ -128,7 +123,6 @@ class Baller2Vec(nn.Module):
         Returns:
             tuple[torch.tensor, torch.tensor]: Player and Ball predictions
         """
-        # X being B x T x 23 x 3
 
         # Inflate features to transformer dimension
         input_features = self.input_mlp(x) * math.sqrt(self.d_model)
@@ -136,13 +130,40 @@ class Baller2Vec(nn.Module):
         output = self.transformer(input_features, self.mask)
 
         # Classify next position based on transformer representation        
-        players = self.player_classifier(output).squeeze(1)
-        ball = self.ball_classifier(output).squeeze(1)
+        result = self.head(output)
+        return result
 
-        return players, ball
+def default_head(d_model : int, n_player_labels : int, n_ball_labels: int):
+    """Creates the default head module that predicts binned player and ball position.
+
+    Args:
+        d_model (int): Input dimension.
+        n_player_labels (int): Number of player position labels.
+        n_ball_labels (int): Number of ball position labels.
+
+    Returns:
+        nn.Module: The classification head.
+    """
+    class Head(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+
+            self.player_classifier = nn.Linear(d_model, n_player_labels)
+            self.player_classifier.weight.data.uniform_(-0.1, 0.1)
+            self.player_classifier.bias.data.zero_()
+
+            self.ball_classifier = nn.Linear(d_model, n_ball_labels)
+            self.ball_classifier.weight.data.uniform_(-0.1, 0.1)
+            self.ball_classifier.bias.data.zero_()
+
+        def forward(self, x):
+            return self.player_classifier(x), self.ball_classifier(x)
+
+    return Head()
+
 
 if "__main__" == __name__:
-    x = torch.rand((8 *23, 3)).to("cuda:0")
+    x = torch.rand((8 *23, 3))
     model = Baller2Vec(
         [128,512],
         8,
@@ -153,5 +174,6 @@ if "__main__" == __name__:
         2048,
         8,
         0.5
-    ).to(device="cuda:0")
+    )
     out = model(x)
+    print(out)
