@@ -1,0 +1,15 @@
+name: thesis
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10
+  - pip
+  - numpy 
+  - pandas
+  - tqdm
+  - matplotlib
+  - seaborn
+  - pillow
+  - wandb
+  - pip:
+    - -r requirements.txt
