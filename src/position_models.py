@@ -3,6 +3,7 @@
 import math
 import torch
 from torch import nn
+from typing import Callable, Tuple
 
 # Adapted from https://github.com/airalcorn2/baller2vec/blob/master/baller2vec.py
 
@@ -73,7 +74,13 @@ class Baller2Vec(nn.Module):
 
         # Initialize head.
         if head == None:
-            self.head = default_head(d_model, n_player_labels, n_ball_labels)
+            self.head = create_default_head(
+                n_player_labels=7140,
+                n_players=22,
+                n_ball_labels=7140,
+                activation= nn.functional.softmax,
+                dropout=0.5
+            )
         else:
             self.head = head
 
@@ -123,7 +130,9 @@ class Baller2Vec(nn.Module):
         Returns:
             tuple[torch.tensor, torch.tensor]: Player and Ball predictions
         """
-
+        # Remove batch dim
+        if len(x.shape) == 3:
+            x = x.squeeze(0)
         # Inflate features to transformer dimension
         input_features = self.input_mlp(x) * math.sqrt(self.d_model)
         # Compute representation with masked future frames
@@ -133,33 +142,66 @@ class Baller2Vec(nn.Module):
         result = self.head(output)
         return result
 
-def default_head(d_model : int, n_player_labels : int, n_ball_labels: int):
+def create_default_head(
+        n_player_labels : int,
+        n_players : int,
+        n_ball_labels : int,
+        activation : Callable = nn.functional.softmax,
+        dropout: float = 0.5
+    ):
     """Creates the default head module that predicts binned player and ball position.
 
     Args:
-        d_model (int): Input dimension.
-        n_player_labels (int): Number of player position labels.
-        n_ball_labels (int): Number of ball position labels.
+        n_player_labels (int): Number of classes to predict for the players.
+        n_players (int): Number of players.
+        n_ball_labels (int): Number of classes to predict for the ball.
+        activation (Callable): Activation function. Defaults to softmax.
+        dropout (float): Dropout rate. Defaults to 0.5.
 
     Returns:
         nn.Module: The classification head.
     """
     class Head(nn.Module):
-        def __init__(self) -> None:
+        def __init__(
+            self,
+            n_player_labels : int,
+            n_players : int,
+            n_ball_labels : int,
+            activation : Callable,
+            dropout: float
+            
+        ) -> None:
             super().__init__()
+            
+            self.n_players = n_players
 
-            self.player_classifier = nn.Linear(d_model, n_player_labels)
+            self.player_classifier = nn.Linear(184, n_player_labels * n_players)
             self.player_classifier.weight.data.uniform_(-0.1, 0.1)
             self.player_classifier.bias.data.zero_()
 
-            self.ball_classifier = nn.Linear(d_model, n_ball_labels)
+            self.ball_classifier = nn.Linear(184, n_ball_labels)
             self.ball_classifier.weight.data.uniform_(-0.1, 0.1)
             self.ball_classifier.bias.data.zero_()
 
-        def forward(self, x):
-            return self.player_classifier(x), self.ball_classifier(x)
+            self.activation = activation
+            self.dropout = nn.Dropout(dropout)
 
-    return Head()
+        def forward(self, x):
+            x = torch.mean(x, dim=1) # mean of each player/ball
+            self.dropout(x)
+            players = self.player_classifier(x)
+            player_preds = self.activation(players.view(self.n_players, -1), dim=1)
+            ball = self.ball_classifier(x)
+            ball_preds = self.activation(ball, dim=0)
+            return ball_preds, player_preds
+
+    return Head(
+        n_player_labels,
+        n_players,
+        n_ball_labels,
+        activation,
+        dropout
+    )
 
 
 if "__main__" == __name__:
@@ -168,8 +210,8 @@ if "__main__" == __name__:
         [128,512],
         8,
         22,
-        1000,
-        1000,
+        7140,
+        7140,
         8,
         2048,
         8,
