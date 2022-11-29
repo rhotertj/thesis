@@ -11,5 +11,6 @@ dependencies:
   - seaborn
   - pillow
   - wandb
+  - simplejson
   - pip:
     - -r requirements.txt
