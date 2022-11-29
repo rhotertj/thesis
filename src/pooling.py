@@ -3,19 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-
-
-from torch.autograd import Variable
-import torch.nn as nn
-import torch.nn.functional as F
-import torch as th
-import math
-
 class NetVLAD(nn.Module):
     """
     NetVLAD: CNN architecture for weakly supervised place recognition
     https://arxiv.org/abs/1511.07247
-    
+
     Adapted from unofficial implementation
     https://github.com/lyakaap/NetVLAD-pytorch/blob/master/netvlad.py
     
