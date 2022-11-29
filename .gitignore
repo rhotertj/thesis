@@ -130,5 +130,10 @@ dmypy.json
 
 # Custom
 lightning_logs
+.lr_find*
 sample.json
 wandb
+experimental
+checkpoints
+.vscode
+src/archive
