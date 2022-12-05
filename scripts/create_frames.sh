@@ -1,0 +1,2 @@
+ls /nfs/data/mm4spa/handball_hbl/video_30_fps | xargs -n1 -I{} -t sh -c "mkdir -p /nfs/home/rhotertj/datasets/hbl/frames/{}.d && ffmpeg -hwaccel cuda -i /nfs/data/mm4spa/handball_hbl/video_30_fps/{} -qscale:v 2 -start_number 0 -vf scale=-1:256 /nfs/home/rhotertj/datasets/hbl/frames/{}.d/%06d.jpg"
+# Think about -qscale:v 2 for better quality
