@@ -12,12 +12,13 @@ import cv2
 
 class HandballSyncedDataset(Dataset):
 
-    def __init__(self, meta_path : str, seq_len : int = 8, load_frames : bool = True):
+    def __init__(self, meta_path : str, seq_len : int = 8, sampling_rate : int = 1, load_frames : bool = True):
         super(HandballSyncedDataset).__init__()
 
         self.seq_len = seq_len
         self.seq_half = seq_len // 2
         self.load_frames = load_frames
+        self.sampling_rate = sampling_rate
 
         # might be useful to pass information from pytorch lightning config about dataset
         self.meta = {}
@@ -84,19 +85,28 @@ class HandballSyncedDataset(Dataset):
 
         # Add half sequence length to index to avoid underflowing dataset idx < seq_len
         match_number, frame_idx = get_index_offset(self.index_tracker, self.idx_to_frame_number, idx + self.seq_half)
-        
+        print(match_number, frame_idx)        
         frame_base_path = Path(self.frame_paths[match_number])
         events = self.event_dfs[match_number]
         frames = []
         
-        label = 2 # Default to 'background' action
+        label = 0 # Default to 'background' action
         label_offset = 0 # Which frame of the window is portraying the action
 
         # Iterate over window, load frames and check for event
-        for window_idx in range(frame_idx - self.seq_half, frame_idx + self.seq_half):
+        sample_range = self.seq_half * self.sampling_rate
+        for window_idx in range(frame_idx - sample_range, frame_idx + sample_range, self.sampling_rate):
             if window_idx in events.index:
                 label = events.loc[window_idx].labels
-                label_offset = (window_idx - frame_idx) + self.seq_half
+                label_offset = ((window_idx - frame_idx) + sample_range) // self.sampling_rate
+            # Check whether we missed an annotation because of a higher sampling rate
+            else:
+                label_idx = _index_close_enough(window_idx, events.index, self.sampling_rate)
+                if label_idx:
+                    label = events.loc[label_idx].labels
+                    print(f"{window_idx=} {frame_idx=} {self.seq_half=} {self.sampling_rate=} {label_idx=} {sample_range=}")
+                    label_offset = ((window_idx - frame_idx) + sample_range) // self.sampling_rate
+            
             if self.load_frames:
                 frame_path = str(frame_base_path / f"{str(window_idx).rjust(6, '0')}.jpg")
                 frame = cv2.imread(frame_path, cv2.IMREAD_COLOR)
@@ -107,6 +117,11 @@ class HandballSyncedDataset(Dataset):
             frames = np.stack(frames)
 
         team_a_pos, team_b_pos, ball_pos, _ = self.position_arrays[match_number]
+
+        team_a_pos = team_a_pos[frame_idx - sample_range : frame_idx + sample_range : self.sampling_rate]
+        team_b_pos = team_b_pos[frame_idx - sample_range : frame_idx + sample_range : self.sampling_rate]
+        ball_pos = ball_pos[frame_idx - sample_range : frame_idx + sample_range : self.sampling_rate]
+        
         team_a_pos, team_b_pos = ensure_equal_teamsize(team_a_pos, team_b_pos)
 
         # add team information
@@ -129,8 +144,8 @@ class HandballSyncedDataset(Dataset):
 
         instance = {
             "frames" : frames,
-            "label" : label, 
             "positions" : all_pos,
+            "label" : label, 
             "label_offset" : label_offset
         }
         return instance
@@ -139,6 +154,24 @@ class HandballSyncedDataset(Dataset):
         """Generate trajectory in json format for internal visualization tool.
         """
         raise NotImplementedError()
+
+
+def _index_close_enough(window_idx, index, sampling_rate):
+    """Checks whether an annotation exists for the current window step that gets overlooked
+    because the sampling rate is bigger than 1.
+
+    Args:
+        window_idx (int): The current index.
+        events (pd.Index): The event index.
+        sampling_range (int): The sampling rate.
+    """
+    if sampling_rate == 1:
+        return False
+    # Resample the entire range with sampling rate 1
+    for idx in range(window_idx - sampling_rate, window_idx + sampling_rate):
+        if idx in index:
+            return idx 
+    
 
 
 def get_index_offset(boundaries, idx2frame, idx):
@@ -187,7 +220,19 @@ def ensure_equal_teamsize(team_a, team_b):
     return team_a, team_b
 
 if "__main__" == __name__:
-    data = HandballSyncedDataset("/nfs/home/rhotertj/datasets/hbl/meta.csv", 8)
-    print(data[10])
+    data = HandballSyncedDataset("/nfs/home/rhotertj/datasets/hbl/meta.csv", 16, sampling_rate=4)
+    from utils import array2gif, draw_trajectory
+    idx = 187
+    instance = data[idx]
+    print("instance label", instance["label"])
+    print("instance label idx", instance["label_offset"])
+    frames = instance["frames"]
+    #[C, F, H, W]
+    frames = np.transpose(frames, (3, 0, 1, 2))
+    positions = instance["positions"]
+    array2gif(frames, f"./img/instance_{idx}.gif", 10)
+    
+    fig = draw_trajectory(positions)
+    fig.savefig(f"./img/instance_{idx}.png")
     
 
