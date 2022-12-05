@@ -92,8 +92,12 @@ class HandballSyncedDataset(Dataset):
                 label_offset = (window_idx - frame_idx) + self.seq_half
             if self.load_frames:
                 frame_path = str(frame_base_path / f"{str(window_idx).rjust(6, '0')}.jpg")
-                frame = cv2.imread(frame_path, cv2.IMREAD_COLOR) # rgb
+                frame = cv2.imread(frame_path, cv2.IMREAD_COLOR)
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 frames.append(frame)
+
+        if self.load_frames:
+            frames = np.stack(frames)
 
         team_a_pos, team_b_pos, ball_pos, _ = self.position_arrays[match_number]
         team_a_pos, team_b_pos = ensure_equal_teamsize(team_a_pos, team_b_pos)
@@ -177,5 +181,6 @@ def ensure_equal_teamsize(team_a, team_b):
 
 if "__main__" == __name__:
     data = HandballSyncedDataset("/nfs/home/rhotertj/datasets/hbl/meta.csv", 8)
+    print(data[10])
     
 
