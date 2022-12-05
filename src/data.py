@@ -13,6 +13,20 @@ import cv2
 class HandballSyncedDataset(Dataset):
 
     def __init__(self, meta_path : str, seq_len : int = 8, sampling_rate : int = 1, load_frames : bool = True):
+        """
+        This dataset provides a number of video frames (determined by seq_len) and
+        corresponding positional data for ball and players.
+        If available, it also provides action label and position in the current frame stack.
+
+        Note that by increasing the sampling rate, the temporal range of the sampled frames increases,
+        whereas the sequence length stays fixed.
+
+        Args:
+            meta_path (str): Path to the .csv file that holds paths to frames, annotations and positions.
+            seq_len (int, optional): An even desired number of frames. Defaults to 8.
+            sampling_rate (int, optional): Number of frames to skip in between. 1 samples subsequent frames corresponding to seq_len. Defaults to 1.
+            load_frames (bool, optional): Whether to read and process images. Defaults to True.
+        """
         super(HandballSyncedDataset).__init__()
 
         self.seq_len = seq_len
@@ -94,18 +108,17 @@ class HandballSyncedDataset(Dataset):
         label_offset = 0 # Which frame of the window is portraying the action
 
         # Iterate over window, load frames and check for event
-        sample_range = self.seq_half * self.sampling_rate
-        for window_idx in range(frame_idx - sample_range, frame_idx + sample_range, self.sampling_rate):
+        half_range = self.seq_half * self.sampling_rate
+        for window_idx in range(frame_idx - half_range, frame_idx + half_range, self.sampling_rate):
             if window_idx in events.index:
                 label = events.loc[window_idx].labels
-                label_offset = ((window_idx - frame_idx) + sample_range) // self.sampling_rate
+                label_offset = ((window_idx - frame_idx) + half_range) // self.sampling_rate
             # Check whether we missed an annotation because of a higher sampling rate
             else:
                 label_idx = _index_close_enough(window_idx, events.index, self.sampling_rate)
                 if label_idx:
                     label = events.loc[label_idx].labels
-                    print(f"{window_idx=} {frame_idx=} {self.seq_half=} {self.sampling_rate=} {label_idx=} {sample_range=}")
-                    label_offset = ((window_idx - frame_idx) + sample_range) // self.sampling_rate
+                    label_offset = ((window_idx - frame_idx) + half_range) // self.sampling_rate
             
             if self.load_frames:
                 frame_path = str(frame_base_path / f"{str(window_idx).rjust(6, '0')}.jpg")
@@ -118,9 +131,9 @@ class HandballSyncedDataset(Dataset):
 
         team_a_pos, team_b_pos, ball_pos, _ = self.position_arrays[match_number]
 
-        team_a_pos = team_a_pos[frame_idx - sample_range : frame_idx + sample_range : self.sampling_rate]
-        team_b_pos = team_b_pos[frame_idx - sample_range : frame_idx + sample_range : self.sampling_rate]
-        ball_pos = ball_pos[frame_idx - sample_range : frame_idx + sample_range : self.sampling_rate]
+        team_a_pos = team_a_pos[frame_idx - half_range : frame_idx + half_range : self.sampling_rate]
+        team_b_pos = team_b_pos[frame_idx - half_range : frame_idx + half_range : self.sampling_rate]
+        ball_pos = ball_pos[frame_idx - half_range : frame_idx + half_range : self.sampling_rate]
         
         team_a_pos, team_b_pos = ensure_equal_teamsize(team_a_pos, team_b_pos)
 
@@ -157,13 +170,16 @@ class HandballSyncedDataset(Dataset):
 
 
 def _index_close_enough(window_idx, index, sampling_rate):
-    """Checks whether an annotation exists for the current window step that gets overlooked
+    """Checks whether an annotation exists for the current window slice that gets overlooked
     because the sampling rate is bigger than 1.
 
     Args:
         window_idx (int): The current index.
         events (pd.Index): The event index.
         sampling_range (int): The sampling rate.
+
+    Returns:
+        idx (int): The frame number of the event in the current window slice.
     """
     if sampling_rate == 1:
         return False
@@ -172,7 +188,6 @@ def _index_close_enough(window_idx, index, sampling_rate):
         if idx in index:
             return idx 
     
-
 
 def get_index_offset(boundaries, idx2frame, idx):
     """The dataset is indexed by idx2frame frames and positions based on sequence length - not all frames have positional data.
