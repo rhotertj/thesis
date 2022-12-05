@@ -52,7 +52,14 @@ class HandballSyncedDataset(Dataset):
 
 
     def __len__(self):
-        # Sliding window approach needs half a sequence as padding
+        """Length of the dataset over all matches.
+            
+            Sliding window approach needs a full sequence as padding,
+            half in the beginning and half at the end.
+
+        Returns:
+            int: Dataset length.
+        """
         return self.index_tracker[-1] - self.seq_len
 
     def __getitem__(self, idx):
