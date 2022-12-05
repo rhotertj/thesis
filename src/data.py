@@ -71,9 +71,10 @@ class HandballSyncedDataset(Dataset):
         Returns:
             dict: A dict containing frames, positions, label and label_offset.
         """
-        # return frames (FrameSeqDataset from mmaction github fork), positions (start with array repr), label (turn dict into), action frame offset and just-one-modality option
 
-        # Get correct match based on idx (match_number) and idx with respect to match and availability (frame_idx) from idx with respect to dataset (param: idx)
+        # Get correct match based on idx (match_number) and idx with respect to match and availability (frame_idx) 
+        # from idx with respect to dataset (param: idx)
+
         # Add half sequence length to index to avoid underflowing dataset idx < seq_len
         match_number, frame_idx = get_index_offset(self.index_tracker, self.idx_to_frame_number, idx + self.seq_half)
         
@@ -83,6 +84,8 @@ class HandballSyncedDataset(Dataset):
         
         label = 2 # Default to 'background' action
         label_offset = 0 # Which frame of the window is portraying the action
+
+        # Iterate over window, load frames and check for event
         for window_idx in range(frame_idx - self.seq_half, frame_idx + self.seq_half):
             if window_idx in events.index:
                 label = events.loc[window_idx].labels
@@ -94,7 +97,6 @@ class HandballSyncedDataset(Dataset):
 
         team_a_pos, team_b_pos, ball_pos, _ = self.position_arrays[match_number]
         team_a_pos, team_b_pos = ensure_equal_teamsize(team_a_pos, team_b_pos)
-        assert (team_a_pos.shape == team_b_pos.shape), f"Teams have different shapes: A: {team_a_pos.shape}, B: {team_b_pos.shape}"
 
         # add team information
         team_a_indicator = np.zeros((*team_a_pos.shape[:2], 1))
@@ -106,7 +108,8 @@ class HandballSyncedDataset(Dataset):
         teams_pos = np.hstack([team_a_pos, team_b_pos])
 
         ball_pos = ball_pos[:, 0, :] # there is just one ball
-        # add z dim for ball, this should be there later
+
+        # add z dim for ball, this should be given in the future
         ball_z = np.zeros((ball_pos.shape[0], 1))
         ball_pos = np.concatenate([ball_pos, ball_z], axis=-1)
         ball_pos = np.expand_dims(ball_pos, 1)
@@ -124,17 +127,7 @@ class HandballSyncedDataset(Dataset):
     def export_json(self, idx):
         """Generate trajectory in json format for internal visualization tool.
         """
-        positions, *_ = self.__getitem__(idx)
-        # list per frame, inside coordinate lists
-        # positions is T positions, T balls
-        jd = {}
-        team_a = [positions[f*22 : f*22 + 11, :2].tolist() for f in range(self.seq_len)]
-        team_b = [positions[f*22 + 11 : (f+1) * 22, :2].tolist() for f in range(self.seq_len)]
-        
-        jd["team_a"] = team_a
-        jd["team_b"] = team_b
-        jd["balls"] = positions[-self.seq_len:].tolist()
-        return jd
+        raise NotImplementedError()
 
 
 def get_index_offset(boundaries, idx2frame, idx):
