@@ -1,10 +1,10 @@
-
 from torch.utils.data import Dataset
 import numpy as np
 import pickle as pkl
 import pandas as pd
 from pathlib import Path
 import cv2
+from typing import Union
 
 # TODO: How to elegantly split wrt matches?
 # TODO: Prepare different representation for positions
@@ -16,7 +16,7 @@ class HandballSyncedDataset(Dataset):
         """
         This dataset provides a number of video frames (determined by seq_len) and
         corresponding positional data for ball and players.
-        If available, it also provides action label and position in the current frame stack.
+        If available, it also provides action label and its position in the current frame stack.
 
         Note that by increasing the sampling rate, the temporal range of the sampled frames increases,
         whereas the sequence length stays fixed.
@@ -24,7 +24,7 @@ class HandballSyncedDataset(Dataset):
         Args:
             meta_path (str): Path to the .csv file that holds paths to frames, annotations and positions.
             seq_len (int, optional): An even desired number of frames. Defaults to 8.
-            sampling_rate (int, optional): Number of frames to skip in between. 1 samples subsequent frames corresponding to seq_len. Defaults to 1.
+            sampling_rate (int, optional): Sample every nth frame. When set to 1, we sample subsequent frames corresponding to seq_len. Defaults to 1.
             load_frames (bool, optional): Whether to read and process images. Defaults to True.
         """
         super(HandballSyncedDataset).__init__()
@@ -46,9 +46,11 @@ class HandballSyncedDataset(Dataset):
         self.position_arrays = []
         for _, row in meta_df.iterrows():
             self.frame_paths.append(row["frames_path"])
-            self.event_dfs.append(
-                pd.read_csv(row["events_path"], index_col="t_start")
-            )
+
+            event_df = pd.read_csv(row["events_path"], index_col="t_start")
+            event_df["labels"] = event_df.labels.apply(eval) # parse dict from string
+            self.event_dfs.append(event_df)
+
             with open(row["positions_path"], "rb") as f:
                 self.position_arrays.append(
                     pkl.load(f)
@@ -59,11 +61,9 @@ class HandballSyncedDataset(Dataset):
         for *_, availability in self.position_arrays:
             kernel = np.ones(self.seq_len)
             available_windows_cvn = np.convolve(availability, kernel, mode="valid")
-            available_windows = np.where(available_windows_cvn == self.seq_len)[0]
+            available_windows = np.where(available_windows_cvn == self.seq_len)[0] - self.seq_half
             self.idx_to_frame_number.append(available_windows)
-            self.index_tracker.append(int(self.index_tracker[-1] + len(available_windows)))
-
-        print("Tracker", self.index_tracker)
+            self.index_tracker.append(int(self.index_tracker[-1] + (len(available_windows) - 1)))
 
 
     def __len__(self):
@@ -75,11 +75,11 @@ class HandballSyncedDataset(Dataset):
         Returns:
             int: Dataset length.
         """
-        return self.index_tracker[-1] - self.seq_len
+        return self.index_tracker[-1] - (self.seq_len * self.sampling_rate)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx, frame_idx : Union[None, int] = None, match_number : Union[None, int] = None):
         """This method returns 
-            - stacked frames (RGB)
+            - stacked frames (RGB) of shape [F x H x W x C]
             - corresponding positional data for players and ball
             - the corresponding event label
             - the annotated event position in the frame stack.
@@ -87,19 +87,26 @@ class HandballSyncedDataset(Dataset):
         Note that the provided index is valid over the whole dataset. It can not be treated as a frame number or index for a given match.
         It first needs to be matched against a match and a frame number, based on the availability of positional data.
 
+        If we need to access a specific set of frames, we can access them by using the keyword arguments. 
+
         Args:
             idx (int): Index of data to be retrieved.
+            frame_idx (Union[None, int]): Raw frame number relative to match begin. Defaults to None.
+            match_number (Union[None, int]): Match number according to meta file. Defaults to None.
 
         Returns:
             dict: A dict containing frames, positions, label and label_offset.
         """
+        # for in loop does not care for size of iterator but goes on until index error is raised
+        if idx >= len(self): raise IndexError
 
         # Get correct match based on idx (match_number) and idx with respect to match and availability (frame_idx) 
         # from idx with respect to dataset (param: idx)
 
         # Add half sequence length to index to avoid underflowing dataset idx < seq_len
-        match_number, frame_idx = get_index_offset(self.index_tracker, self.idx_to_frame_number, idx + self.seq_half)
-        print(match_number, frame_idx)        
+        if frame_idx is None:
+            match_number, frame_idx = get_index_offset(self.index_tracker, self.idx_to_frame_number, idx + (self.seq_half * self.sampling_rate))
+        # print(idx, match_number, frame_idx)
         frame_base_path = Path(self.frame_paths[match_number])
         events = self.event_dfs[match_number]
         frames = []
@@ -175,7 +182,7 @@ def _index_close_enough(window_idx, index, sampling_rate):
 
     Args:
         window_idx (int): The current index.
-        events (pd.Index): The event index.
+        events (pd.Index): Frame numbers that portray an action.
         sampling_range (int): The sampling rate.
 
     Returns:
@@ -239,7 +246,7 @@ if "__main__" == __name__:
     from utils import array2gif, draw_trajectory
     idx = 187
     instance = data[idx]
-    print("instance label", instance["label"])
+    print("instance label", instance["label"], type(instance["label"]))
     print("instance label idx", instance["label_offset"])
     frames = instance["frames"]
     #[C, F, H, W]
