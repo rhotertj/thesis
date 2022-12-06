@@ -59,9 +59,10 @@ class HandballSyncedDataset(Dataset):
         # NOTE: All arrays and paths are indexed based on frame number.
         # We need to create a mapping to ensure availability of position data 
         for *_, availability in self.position_arrays:
-            kernel = np.ones(self.seq_len)
+            sample_range = self.seq_len * self.sampling_rate
+            kernel = np.ones(sample_range)
             available_windows_cvn = np.convolve(availability, kernel, mode="valid")
-            available_windows = np.where(available_windows_cvn == self.seq_len)[0] - self.seq_half
+            available_windows = np.where(available_windows_cvn == sample_range)[0] - (sample_range - 1)
             self.idx_to_frame_number.append(available_windows)
             self.index_tracker.append(int(self.index_tracker[-1] + (len(available_windows) - 1)))
 
@@ -98,7 +99,7 @@ class HandballSyncedDataset(Dataset):
             dict: A dict containing frames, positions, label and label_offset.
         """
         # for in loop does not care for size of iterator but goes on until index error is raised
-        if idx >= len(self): raise IndexError
+        if idx >= len(self): raise IndexError(f"{idx} out of range for dataset size {len(self)}")
 
         # Get correct match based on idx (match_number) and idx with respect to match and availability (frame_idx) 
         # from idx with respect to dataset (param: idx)
@@ -138,9 +139,10 @@ class HandballSyncedDataset(Dataset):
 
         team_a_pos, team_b_pos, ball_pos, _ = self.position_arrays[match_number]
 
-        team_a_pos = team_a_pos[frame_idx - half_range : frame_idx + half_range : self.sampling_rate]
-        team_b_pos = team_b_pos[frame_idx - half_range : frame_idx + half_range : self.sampling_rate]
-        ball_pos = ball_pos[frame_idx - half_range : frame_idx + half_range : self.sampling_rate]
+        position_slice = slice(frame_idx - half_range, frame_idx + half_range, self.sampling_rate)
+        team_a_pos = team_a_pos[position_slice]
+        team_b_pos = team_b_pos[position_slice]
+        ball_pos = ball_pos[position_slice]
         
         team_a_pos, team_b_pos = ensure_equal_teamsize(team_a_pos, team_b_pos)
 
@@ -210,7 +212,7 @@ def get_index_offset(boundaries, idx2frame, idx):
         frame_idx (int): Frame number for given index
     """
     for match, (i, j) in enumerate(zip(boundaries, boundaries[1:])):
-        if i <= idx and j >= idx:
+        if i <= idx and idx < j:
             match_number = match
             offset = idx - boundaries[match]
             frame_idx = idx2frame[match][offset]
