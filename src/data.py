@@ -1,10 +1,10 @@
-from torch.utils.data import Dataset
 import numpy as np
 import pickle as pkl
 import pandas as pd
 from pathlib import Path
 import cv2
 from typing import Union
+from torch.utils.data import Dataset
 
 # TODO: How to elegantly split wrt matches?
 # TODO: Prepare different representation for positions
@@ -38,13 +38,14 @@ class HandballSyncedDataset(Dataset):
         self.meta = {}
 
         print(f"Read {meta_path}...")
-        meta_df = pd.read_csv(meta_path)
+        self.meta_df = pd.read_csv(meta_path)
         self.index_tracker = [0]
         self.idx_to_frame_number = []
         self.frame_paths = []
         self.event_dfs = []
         self.position_arrays = []
-        for _, row in meta_df.iterrows():
+        self.position_offsets = []
+        for _, row in self.meta_df.iterrows():
             self.frame_paths.append(row["frames_path"])
 
             event_df = pd.read_csv(row["events_path"], index_col="t_start")
@@ -55,16 +56,20 @@ class HandballSyncedDataset(Dataset):
                 self.position_arrays.append(
                     pkl.load(f)
                 )
+            
+            self.position_offsets.append(int(row["position_offset"]))
         
-        # NOTE: All arrays and paths are indexed based on frame number.
-        # We need to create a mapping to ensure availability of position data 
+        # NOTE: All events, positions and image paths are indexed based on frame number.
+        # We need to create a mapping from frame with available positions
+        # to absolute frame number to access the data.
         for *_, availability in self.position_arrays:
             sample_range = self.seq_len * self.sampling_rate
             kernel = np.ones(sample_range)
-            available_windows_cvn = np.convolve(availability, kernel, mode="valid")
+            available_windows_cvn = np.convolve(availability, kernel) # previously used mode='valid'
             available_windows = np.where(available_windows_cvn == sample_range)[0] - (sample_range - 1)
+
             self.idx_to_frame_number.append(available_windows)
-            self.index_tracker.append(int(self.index_tracker[-1] + (len(available_windows) - 1)))
+            self.index_tracker.append(int(self.index_tracker[-1] + len(available_windows)))
 
 
     def __len__(self):
@@ -78,7 +83,7 @@ class HandballSyncedDataset(Dataset):
         """
         return self.index_tracker[-1] - (self.seq_len * self.sampling_rate)
 
-    def __getitem__(self, idx, frame_idx : Union[None, int] = None, match_number : Union[None, int] = None):
+    def __getitem__(self, idx, frame_idx : Union[None, int] = None, match_number : Union[None, int] = None, positions_offset : int = 0):
         """This method returns 
             - stacked frames (RGB) of shape [F x H x W x C]
             - corresponding positional data for players and ball
@@ -101,13 +106,17 @@ class HandballSyncedDataset(Dataset):
         # for in loop does not care for size of iterator but goes on until index error is raised
         if idx >= len(self): raise IndexError(f"{idx} out of range for dataset size {len(self)}")
 
-        # Get correct match based on idx (match_number) and idx with respect to match and availability (frame_idx) 
-        # from idx with respect to dataset (param: idx)
-
-        # Add half sequence length to index to avoid underflowing dataset idx < seq_len
+        
         if frame_idx is None:
+            # Get correct match based on idx (match_number) and idx with respect to match and availability (frame_idx) 
+            # from idx with respect to dataset (param: idx)
+            # Add half sequence length to index to avoid underflowing dataset idx < seq_len
             match_number, frame_idx = get_index_offset(self.index_tracker, self.idx_to_frame_number, idx + (self.seq_half * self.sampling_rate))
-        # print(idx, match_number, frame_idx)
+            
+        if positions_offset == 0:
+            positions_offset = self.position_offsets[match_number]
+            # print(f"{idx=}{match_number=}{frame_idx=}{positions_offset=}")
+
         frame_base_path = Path(self.frame_paths[match_number])
         events = self.event_dfs[match_number]
         frames = []
@@ -123,7 +132,7 @@ class HandballSyncedDataset(Dataset):
                 label_offset = ((window_idx - frame_idx) + half_range) // self.sampling_rate
             # Check whether we missed an annotation because of a higher sampling rate
             else:
-                label_idx = _index_close_enough(window_idx, events.index, self.sampling_rate)
+                label_idx = check_label_within_slice(window_idx, events.index, self.sampling_rate)
                 if label_idx:
                     label = events.loc[label_idx].labels
                     label_offset = ((window_idx - frame_idx) + half_range) // self.sampling_rate
@@ -139,7 +148,7 @@ class HandballSyncedDataset(Dataset):
 
         team_a_pos, team_b_pos, ball_pos, _ = self.position_arrays[match_number]
 
-        position_slice = slice(frame_idx - half_range, frame_idx + half_range, self.sampling_rate)
+        position_slice = slice((frame_idx - half_range) - positions_offset, (frame_idx + half_range) - positions_offset, self.sampling_rate)
         team_a_pos = team_a_pos[position_slice]
         team_b_pos = team_b_pos[position_slice]
         ball_pos = ball_pos[position_slice]
@@ -178,7 +187,7 @@ class HandballSyncedDataset(Dataset):
         raise NotImplementedError()
 
 
-def _index_close_enough(window_idx, index, sampling_rate):
+def check_label_within_slice(window_idx, index, sampling_rate):
     """Checks whether an annotation exists for the current window slice that gets overlooked
     because the sampling rate is bigger than 1.
 

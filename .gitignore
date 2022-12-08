@@ -137,3 +137,4 @@ experimental
 checkpoints
 .vscode
 src/archive
+img/instance*

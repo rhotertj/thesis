@@ -2,28 +2,29 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
-from data import HandballSyncedDataset
 
-def draw_trajectory(positions : np.array):
+def draw_trajectory(positions : np.ndarray):
     positions[:, -1, 2] = 2 # give ball an extra team
     T = positions.shape[0]
     # start new figure
     plt.close()
     fig = plt.figure()
+    plt.xlim(0,40)
+    plt.ylim(0,20)
 
     for t in range(T):
         a = t / T
-        x_t = positions[t, :, 1]
-        y_t = positions[t, :, 0]
+        y_t = positions[t, :, 1]
+        x_t = positions[t, :, 0]
         teams = positions[t, :, 2]
         players = list(range(positions.shape[1]))
         # change axis to improve format in plot
-        sns.scatterplot(y=x_t, x=y_t, hue=teams, style=players, legend=False, palette="Set1", alpha=a)
+        sns.scatterplot(y=y_t, x=x_t, hue=teams, style=players, legend=False, palette="Set1", alpha=a)
 
     return fig 
 
 
-def array2gif(arr : np.array, out_path : str, fps : int):
+def array2gif(arr : np.ndarray, out_path : str, fps : int):
     # Expect tensor to be [C, F, H, W]
     if arr.ndim == 5:
         arr = arr.squeeze(0)
