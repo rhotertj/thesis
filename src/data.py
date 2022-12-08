@@ -57,7 +57,7 @@ class HandballSyncedDataset(Dataset):
                     pkl.load(f)
                 )
             
-            self.position_offsets.append(int(row["position_offset"]))
+            self.position_offsets.append(int(row["position_offset"] * self.sampling_rate))
         
         # NOTE: All events, positions and image paths are indexed based on frame number.
         # We need to create a mapping from frame with available positions
@@ -115,7 +115,7 @@ class HandballSyncedDataset(Dataset):
             
         if positions_offset == 0:
             positions_offset = self.position_offsets[match_number]
-            # print(f"{idx=}{match_number=}{frame_idx=}{positions_offset=}")
+            # print(f"{idx=} {match_number=} {frame_idx=} {positions_offset=}")
 
         frame_base_path = Path(self.frame_paths[match_number])
         events = self.event_dfs[match_number]
@@ -208,7 +208,7 @@ def check_label_within_slice(window_idx, index, sampling_rate):
     
 
 def get_index_offset(boundaries, idx2frame, idx):
-    """The dataset is indexed by idx2frame frames and positions based on sequence length - not all frames have positional data.
+    """The dataset is indexed by frames and positions based on sequence length - not all frames have positional data.
     This function maps the index w.r.t. the dataset to the the match (mapping) and the frame number (offset)
 
     Args:
