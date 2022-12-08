@@ -138,3 +138,6 @@ checkpoints
 .vscode
 src/archive
 img/instance*
+img/class*
+dataset/occurences*
+dataset/class2frame*
