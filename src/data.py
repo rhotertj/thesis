@@ -6,7 +6,6 @@ import cv2
 from typing import Union
 from torch.utils.data import Dataset
 
-# TODO: How to elegantly split wrt matches?
 # TODO: Prepare different representation for positions
         # -> On the fly plotting might be too slow
 
@@ -99,6 +98,7 @@ class HandballSyncedDataset(Dataset):
             idx (int): Index of data to be retrieved.
             frame_idx (Union[None, int]): Raw frame number relative to match begin. Defaults to None.
             match_number (Union[None, int]): Match number according to meta file. Defaults to None.
+            positions_offset (int): Offset between position frame and video frame. Defaults to 0.
 
         Returns:
             dict: A dict containing frames, positions, label and label_offset.
@@ -163,8 +163,13 @@ class HandballSyncedDataset(Dataset):
         team_b_pos = np.concatenate([team_b_pos, team_b_indicator], axis=-1)
 
         teams_pos = np.hstack([team_a_pos, team_b_pos])
-
-        ball_pos = ball_pos[:, 0, :] # there is just one ball
+        
+        if (ball_pos == 0).all():
+            ball_pos = ball_pos[: ,0 ,:]
+        else:
+            ball_avail = np.where(ball_pos)
+            ball_pos = ball_pos[ball_avail]
+            ball_pos = ball_pos.reshape(self.seq_len, -1)
 
         # add z dim for ball, this should be given in the future
         ball_z = np.zeros((ball_pos.shape[0], 1))
