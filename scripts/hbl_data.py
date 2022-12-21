@@ -158,7 +158,6 @@ def main():
 
     new_meta_df.to_csv(META_PATH  / "meta.csv")
     print(new_meta_df)           
-    # TODO: Q: What is position available?
     # TODO: More comments and documentation at the top :)
 
 
