@@ -139,5 +139,6 @@ checkpoints
 src/archive
 img/instance*
 img/class*
+img/match*
 dataset/occurences*
 dataset/class2frame*
