@@ -9,7 +9,7 @@ This script is intended to synchronize position and video data and their respect
 
 import sys
 sys.path.append("/nfs/data/mm4spa/mm_hbl/scripts/sync/")
-
+import shutil
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -24,9 +24,15 @@ DATA_SOURCE = Path("/nfs/data/mm4spa/mm_hbl/hbl_19-20")
 
 EVENTS_PATH = Path("/nfs/home/rhotertj/datasets/hbl/events")
 POSITIONS_PATH = Path("/nfs/home/rhotertj/datasets/hbl/positions")
-FRAMES_PATH = Path("/nfs/home/rhotertj/datasets/hbl/frames")
+FRAMES_PATH = Path("/nfs/home/rhotertj/datasets/hbl/frames_2997")
+VIDEO_PATH = Path("/nfs/home/rhotertj/datasets/hbl/videos")
 META_PATH = Path("/nfs/home/rhotertj/datasets/hbl/")
 
+def copy_and_rename_videos(meta_df):
+    for event_id, row in meta_df.iterrows():
+        src = DATA_SOURCE / "raw_video" / row["raw_video"]
+        target = VIDEO_PATH  / f"{event_id.replace('sr:sport_event:', '')}.mp4"
+        shutil.copy(src, target)
 
 def read_all_matches_meta():
     # base mapping to video and position data
@@ -107,6 +113,7 @@ def main():
 
     # Read meta info for all matches, including their video and position files
     meta_df = read_all_matches_meta()
+
     new_meta_df = meta_df.copy(deep=True)
     new_meta_df["n_frames"] = round(meta_df["duration"] * meta_df["avg_frame_rate"])
     new_meta_df["frames_path"] = ""
@@ -154,11 +161,10 @@ def main():
             pkl.dump(pos_sets, f)
         new_meta_df.loc[meta_df.index[match_number], "positions_path"] = positions_path
 
-        new_meta_df.loc[meta_df.index[match_number], "frames_path"] = FRAMES_PATH / f"{event_file[:6]}_30.mp4.d"
+        new_meta_df.loc[meta_df.index[match_number], "frames_path"] = FRAMES_PATH / f"{meta_info.match_id_min}.mp4.d"
 
     new_meta_df.to_csv(META_PATH  / "meta.csv")
     print(new_meta_df)           
-    # TODO: More comments and documentation at the top :)
 
 
 if __name__== "__main__":

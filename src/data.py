@@ -56,7 +56,7 @@ class HandballSyncedDataset(Dataset):
                     pkl.load(f)
                 )
             
-            self.position_offsets.append(int(row["position_offset"] * self.sampling_rate))
+            # self.position_offsets.append(int(row["position_offset"] * self.sampling_rate))
         
         # NOTE: All events, positions and image paths are indexed based on frame number.
         # We need to create a mapping from frame with available positions
@@ -113,8 +113,8 @@ class HandballSyncedDataset(Dataset):
             # Add half sequence length to index to avoid underflowing dataset idx < seq_len
             match_number, frame_idx = get_index_offset(self.index_tracker, self.idx_to_frame_number, idx + (self.seq_half * self.sampling_rate))
             
-        if positions_offset == 0:
-            positions_offset = self.position_offsets[match_number]
+        # if positions_offset == 0:
+        #     positions_offset = self.position_offsets[match_number]
             # print(f"{idx=} {match_number=} {frame_idx=} {positions_offset=}")
 
         frame_base_path = Path(self.frame_paths[match_number])

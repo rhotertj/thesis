@@ -1,2 +1,3 @@
-ls /nfs/data/mm4spa/handball_hbl/video_30_fps | xargs -n1 -I{} -t sh -c "mkdir -p /nfs/home/rhotertj/datasets/hbl/frames/{}.d && ffmpeg -hwaccel cuda -i /nfs/data/mm4spa/handball_hbl/video_30_fps/{} -qscale:v 2 -start_number 0 -vf scale=-1:256 /nfs/home/rhotertj/datasets/hbl/frames/{}.d/%06d.jpg"
+# use gpu accelerated container: srun --pty -w devbox5 -G 1 singularity shell /nfs/home/rhotertj/env/mmaction/decord_cuda.sif
+ls /nfs/home/rhotertj/datasets/hbl/videos | xargs -n1 -I{} -t sh -c "mkdir -p /nfs/home/rhotertj/datasets/hbl/frames_2997/{}.d && ffmpeg -hwaccel cuda -i /nfs/home/rhotertj/datasets/hbl/videos/{} -qscale:v 2 -start_number 0 -vf scale=-1:256 /nfs/home/rhotertj/datasets/hbl/frames_2997/{}.d/%06d.jpg"
 # Think about -qscale:v 2 for better quality
