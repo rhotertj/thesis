@@ -16,6 +16,7 @@ import numpy as np
 import json
 import pickle as pkl
 from tqdm import tqdm
+import scipy
 
 import sync
 from kinexon_reader import read_kinexon_file
@@ -80,10 +81,39 @@ def read_sync_sportradar_data(fname, meta_info):
     ) # aligned video timestamp t_v in [s]
     return df_events
 
+def resample(dxy: np.ndarray, resample_factor: float) -> np.ndarray:
+    """Resample dim=0 and interpolate each element of dim=1 individually.
+
+    Args:
+        dxy (np.ndarray): ndarray of [T, N, ?] where T is modified and the last dimension is interpolated for each N
+        resample_factor (float): resampling factor
+
+    Returns:
+        np.ndarray: ndarray of shape [T*resample_factor, N, ?]
+    """
+    t_r = int(dxy.shape[0] * resample_factor)  # new target time dimension
+
+    if dxy.ndim == 2: # ball positions, no player dimension
+        dxy = np.expand_dims(dxy, 1)
+
+    def _resample(x: np.ndarray):
+        # From: https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.interp1d.html#scipy.interpolate.interp1d
+        # "Calling interp1d with NaNs present in input values results in undefined behaviour."
+        interp_fn = scipy.interpolate.interp1d(range(len(x)), x)
+        xr = interp_fn(np.linspace(0, len(x) - 1, num=t_r))
+        return xr
+
+    drxy = np.zeros((t_r, *dxy.shape[1:]), dtype=np.float64)
+
+    for player in range(dxy.shape[-2]):
+        for dim in range(dxy.shape[-1]):
+            drxy[:, player, dim] = _resample(dxy[:, player, dim])
+    return drxy
+
 def align_position_to_video(pos_sets, meta_info):
     # Resample pos to video frame rate by interpolation
     resampling_factor = meta_info.avg_frame_rate / meta_info.avg_frame_rate_pos
-    pos_sets = [sync.resample(xyz, resampling_factor) for xyz in pos_sets]
+    pos_sets = [resample(xyz, resampling_factor) for xyz in pos_sets]
     # print(f"After resampling to {meta_info.avg_frame_rate=}fps", [x.shape for x in pos_sets])
 
     # Align position data to video
@@ -144,10 +174,10 @@ def main():
         # print(f"{meta_info.avg_frame_rate_pos=}fps", [x.shape for x in pos_sets])
 
         pos_sets = align_position_to_video(pos_sets, meta_info)
-
+        
         pos_available = sync.pos_available(pos_sets[0], pos_sets[1], value_check="zeros")
         pos_sets.append(pos_available)
-
+        
         event_file = match_id2event_json[f"sr:sport_event:{meta_info.match_id_min}"]
         # print("Read", DATA_SOURCE / "events_its" / event_file)
         events_df = pd.read_json(DATA_SOURCE / "events_its" / event_file, lines=True)
@@ -156,14 +186,14 @@ def main():
         events_df.to_csv(events_path)
         new_meta_df.loc[meta_df.index[match_number], "events_path"] = events_path
 
-        positions_path = POSITIONS_PATH / (meta_info.match_id_min + ".npy")
+        positions_path = POSITIONS_PATH / (meta_info.match_id_min + "3d.npy")
         with open(positions_path, "wb+") as f:
             pkl.dump(pos_sets, f)
         new_meta_df.loc[meta_df.index[match_number], "positions_path"] = positions_path
 
         new_meta_df.loc[meta_df.index[match_number], "frames_path"] = FRAMES_PATH / f"{meta_info.match_id_min}.mp4.d"
 
-    new_meta_df.to_csv(META_PATH  / "meta.csv")
+    new_meta_df.to_csv(META_PATH  / "meta3d.csv")
     print(new_meta_df)           
 
 

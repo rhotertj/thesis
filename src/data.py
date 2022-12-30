@@ -147,20 +147,25 @@ class HandballSyncedDataset(Dataset):
             frames = np.stack(frames)
 
         team_a_pos, team_b_pos, ball_pos, _ = self.position_arrays[match_number]
-
+        
         position_slice = slice((frame_idx - half_range) - positions_offset, (frame_idx + half_range) - positions_offset, self.sampling_rate)
         team_a_pos = team_a_pos[position_slice]
         team_b_pos = team_b_pos[position_slice]
         ball_pos = ball_pos[position_slice]
         
         team_a_pos, team_b_pos = ensure_equal_teamsize(team_a_pos, team_b_pos)
+        
+        if team_a_pos.shape[2] == 2:
+            # add team indicator
+            team_a_indicator = np.zeros((*team_a_pos.shape[:2], 1))
+            team_b_indicator = team_a_indicator + 1
 
-        # add team information
-        team_a_indicator = np.zeros((*team_a_pos.shape[:2], 1))
-        team_b_indicator = team_a_indicator + 1
-
-        team_a_pos = np.concatenate([team_a_pos, team_a_indicator], axis=-1)
-        team_b_pos = np.concatenate([team_b_pos, team_b_indicator], axis=-1)
+            team_a_pos = np.concatenate([team_a_pos, team_a_indicator], axis=-1)
+            team_b_pos = np.concatenate([team_b_pos, team_b_indicator], axis=-1)
+        else:
+            # switch dummy z position with team indicator
+            team_a_pos[:, :, 2] = 0
+            team_b_pos[:, :, 2] = 1
 
         teams_pos = np.hstack([team_a_pos, team_b_pos])
         
@@ -169,13 +174,14 @@ class HandballSyncedDataset(Dataset):
         else:
             ball_avail = np.where(ball_pos)
             ball_pos = ball_pos[ball_avail]
-            ball_pos = ball_pos.reshape(self.seq_len, -1)
+            ball_pos = ball_pos.reshape(self.seq_len, 1, -1)
+        
 
-        # add z dim for ball, this should be given in the future
-        ball_z = np.zeros((ball_pos.shape[0], 1))
-        ball_pos = np.concatenate([ball_pos, ball_z], axis=-1)
-        ball_pos = np.expand_dims(ball_pos, 1)
-
+        # add z dim for ball if not given
+        if ball_pos.shape[2] == 2:
+            ball_z = np.zeros((ball_pos.shape[0], 1, 1))
+            ball_pos = np.concatenate([ball_pos, ball_z], axis=-1)
+        
         all_pos = np.hstack([teams_pos, ball_pos])
 
         instance = {
@@ -258,7 +264,7 @@ def ensure_equal_teamsize(team_a, team_b):
     return team_a, team_b
 
 if "__main__" == __name__:
-    data = HandballSyncedDataset("/nfs/home/rhotertj/datasets/hbl/meta.csv", 16, sampling_rate=4)
+    data = HandballSyncedDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", 12, sampling_rate=2)
     from utils import array2gif, draw_trajectory
     idx = 187
     instance = data[idx]
