@@ -184,6 +184,8 @@ class HandballSyncedDataset(Dataset):
         
         all_pos = np.hstack([teams_pos, ball_pos])
 
+        # all_pos = mirror_positions(all_pos)
+
         instance = {
             "frames" : frames,
             "positions" : all_pos,
@@ -263,6 +265,23 @@ def ensure_equal_teamsize(team_a, team_b):
 
     return team_a, team_b
 
+def mirror_positions(positions, horizontal=True, vertical=False, court_width=40, court_height=20):
+    """Mirrors the given positions of players and ball on the court.
+    Horizontal mirroring effectively switches sides whereas vertical mirroring
+    switches left and right.
+
+    Args:
+        positions (np.ndarray): Player and ball positions.
+        horizontal (bool, optional): Mirror horizontally. Defaults to False.
+        vertical (bool, optional): Mirror vertically. Defaults to True.
+    """
+    if vertical:
+        positions[:, :, 1] = court_height - positions[:, :, 1]
+    if horizontal:
+        positions[:, :, 0] = court_width - positions[:, :, 0]
+
+    return positions
+
 if "__main__" == __name__:
     data = HandballSyncedDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", 12, sampling_rate=2)
     from utils import array2gif, draw_trajectory
@@ -270,6 +289,7 @@ if "__main__" == __name__:
     instance = data[idx]
     print("instance label", instance["label"], type(instance["label"]))
     print("instance label idx", instance["label_offset"])
+    print("positions", instance["positions"])
     frames = instance["frames"]
     #[C, F, H, W]
     frames = np.transpose(frames, (3, 0, 1, 2))
