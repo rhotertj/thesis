@@ -43,7 +43,8 @@ class HandballSyncedDataset(Dataset):
         self.frame_paths = []
         self.event_dfs = []
         self.position_arrays = []
-        self.position_offsets = []
+        self.mirror_vertical = []
+        self.mirror_horizontal = []
         for _, row in self.meta_df.iterrows():
             self.frame_paths.append(row["frames_path"])
 
@@ -56,7 +57,8 @@ class HandballSyncedDataset(Dataset):
                     pkl.load(f)
                 )
             
-            # self.position_offsets.append(int(row["position_offset"] * self.sampling_rate))
+            self.mirror_horizontal.append(row["mirror_horizontal"])
+            self.mirror_vertical.append(row["mirror_vertical"])
         
         # NOTE: All events, positions and image paths are indexed based on frame number.
         # We need to create a mapping from frame with available positions
@@ -184,7 +186,11 @@ class HandballSyncedDataset(Dataset):
         
         all_pos = np.hstack([teams_pos, ball_pos])
 
-        # all_pos = mirror_positions(all_pos)
+        all_pos = mirror_positions(
+            all_pos,
+            vertical=self.mirror_vertical[match_number],
+            horizontal=self.mirror_horizontal[match_number]
+            )
 
         instance = {
             "frames" : frames,
