@@ -108,16 +108,11 @@ class HandballSyncedDataset(Dataset):
         # for in loop does not care for size of iterator but goes on until index error is raised
         if idx >= len(self): raise IndexError(f"{idx} out of range for dataset size {len(self)}")
 
-        
         if frame_idx is None:
             # Get correct match based on idx (match_number) and idx with respect to match and availability (frame_idx) 
             # from idx with respect to dataset (param: idx)
             # Add half sequence length to index to avoid underflowing dataset idx < seq_len
             match_number, frame_idx = get_index_offset(self.index_tracker, self.idx_to_frame_number, idx + (self.seq_half * self.sampling_rate))
-            
-        # if positions_offset == 0:
-        #     positions_offset = self.position_offsets[match_number]
-            # print(f"{idx=} {match_number=} {frame_idx=} {positions_offset=}")
 
         frame_base_path = Path(self.frame_paths[match_number])
         events = self.event_dfs[match_number]
@@ -173,11 +168,11 @@ class HandballSyncedDataset(Dataset):
         
         if (ball_pos == 0).all():
             ball_pos = ball_pos[: ,0 ,:]
+            ball_pos = ball_pos.reshape(self.seq_len, 1, -1)
         else:
             ball_avail = np.where(ball_pos)
             ball_pos = ball_pos[ball_avail]
             ball_pos = ball_pos.reshape(self.seq_len, 1, -1)
-        
 
         # add z dim for ball if not given
         if ball_pos.shape[2] == 2:
@@ -291,8 +286,9 @@ def mirror_positions(positions, horizontal=True, vertical=False, court_width=40,
 if "__main__" == __name__:
     data = HandballSyncedDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", 12, sampling_rate=2)
     from utils import array2gif, draw_trajectory
-    idx = 187
+    idx = 631762
     instance = data[idx]
+    exit()
     print("instance label", instance["label"], type(instance["label"]))
     print("instance label idx", instance["label_offset"])
     print("positions", instance["positions"])
