@@ -4,14 +4,17 @@ import pandas as pd
 from pathlib import Path
 import cv2
 from typing import Union
+import torch
+from collections import Counter
 from torch.utils.data import Dataset
+from torchvision.transforms import Compose
 
 # TODO: Prepare different representation for positions
         # -> On the fly plotting might be too slow
 
-class HandballSyncedDataset(Dataset):
+class MultiModalHblDataset(Dataset):
 
-    def __init__(self, meta_path : str, seq_len : int = 8, sampling_rate : int = 1, load_frames : bool = True):
+    def __init__(self, meta_path : str, seq_len : int = 8, sampling_rate : int = 1, load_frames : bool = True, transforms : Union[None, Compose] = None, label_mapping : callable = lambda x : x):
         """
         This dataset provides a number of video frames (determined by seq_len) and
         corresponding positional data for ball and players.
@@ -26,17 +29,19 @@ class HandballSyncedDataset(Dataset):
             sampling_rate (int, optional): Sample every nth frame. When set to 1, we sample subsequent frames corresponding to seq_len. Defaults to 1.
             load_frames (bool, optional): Whether to read and process images. Defaults to True.
         """
-        super(HandballSyncedDataset).__init__()
+        super(MultiModalHblDataset).__init__()
 
-        self.seq_len = seq_len
+        self.seq_len = (seq_len // 2) * 2
         self.seq_half = seq_len // 2
         self.load_frames = load_frames
         self.sampling_rate = sampling_rate
+        self.transforms = transforms
+        self.label_mapping = label_mapping
 
         # might be useful to pass information from pytorch lightning config about dataset
         self.meta = {}
 
-        print(f"Read {meta_path}...")
+        # print(f"Read {meta_path}...")
         self.meta_df = pd.read_csv(meta_path)
         self.index_tracker = [0]
         self.idx_to_frame_number = []
@@ -84,7 +89,7 @@ class HandballSyncedDataset(Dataset):
         """
         return self.index_tracker[-1] - (self.seq_len * self.sampling_rate)
 
-    def __getitem__(self, idx, frame_idx : Union[None, int] = None, match_number : Union[None, int] = None, positions_offset : int = 0):
+    def __getitem__(self, idx, frame_idx : Union[None, int] = None, match_number : Union[None, int] = None, positions_offset : int = 0) -> dict:
         """This method returns 
             - stacked frames (RGB) of shape [F x H x W x C]
             - corresponding positional data for players and ball
@@ -118,7 +123,7 @@ class HandballSyncedDataset(Dataset):
         events = self.event_dfs[match_number]
         frames = []
         
-        label = 0 # Default to 'background' action
+        label = {} # Default to 'background' action
         label_offset = 0 # Which frame of the window is portraying the action
 
         # Iterate over window, load frames and check for event
@@ -142,6 +147,11 @@ class HandballSyncedDataset(Dataset):
 
         if self.load_frames:
             frames = np.stack(frames)
+            frames = frames.transpose(0, 3, 1, 2)
+            if self.transforms:
+                frames = torch.FloatTensor(frames)
+                frames = self.transforms(frames)
+                frames = frames.permute(1, 0, 2, 3)
 
         team_a_pos, team_b_pos, ball_pos, _ = self.position_arrays[match_number]
         
@@ -150,8 +160,8 @@ class HandballSyncedDataset(Dataset):
         team_b_pos = team_b_pos[position_slice]
         ball_pos = ball_pos[position_slice]
         
-        team_a_pos, team_b_pos = ensure_equal_teamsize(team_a_pos, team_b_pos)
-        
+        team_a_pos, team_b_pos = ensure_correct_team_size(team_a_pos, team_b_pos)
+
         if team_a_pos.shape[2] == 2:
             # add team indicator
             team_a_indicator = np.zeros((*team_a_pos.shape[:2], 1))
@@ -165,20 +175,13 @@ class HandballSyncedDataset(Dataset):
             team_b_pos[:, :, 2] = 1
 
         teams_pos = np.hstack([team_a_pos, team_b_pos])
-        
-        if (ball_pos == 0).all():
-            ball_pos = ball_pos[: ,0 ,:]
-            ball_pos = ball_pos.reshape(self.seq_len, 1, -1)
-        else:
-            ball_avail = np.where(ball_pos)
-            ball_pos = ball_pos[ball_avail]
-            ball_pos = ball_pos.reshape(self.seq_len, 1, -1)
 
         # add z dim for ball if not given
         if ball_pos.shape[2] == 2:
             ball_z = np.zeros((ball_pos.shape[0], 1, 1))
             ball_pos = np.concatenate([ball_pos, ball_z], axis=-1)
         
+        # ball_pos = ensure_ball_availability(ball_pos)
         all_pos = np.hstack([teams_pos, ball_pos])
 
         all_pos = mirror_positions(
@@ -186,6 +189,8 @@ class HandballSyncedDataset(Dataset):
             vertical=self.mirror_vertical[match_number],
             horizontal=self.mirror_horizontal[match_number]
             )
+
+        label = self.label_mapping(label)
 
         instance = {
             "frames" : frames,
@@ -241,30 +246,62 @@ def get_index_offset(boundaries, idx2frame, idx):
             frame_idx = idx2frame[match][offset]
             return match_number, frame_idx
     
-
-def ensure_equal_teamsize(team_a, team_b):
-    """Some positional data come with different team sizes.
-    We pad the smaller team with zeros to be able to concatenate the team positions later.
+# TODO: Move to preprocessing
+def ensure_correct_team_size(team_a, team_b):
+    """Some trajectory data comes with different team sizes, inflated with zeros and more than 7 active players.
+    We downsize all teams to 7 players and pad teams with missing data.
 
     Args:
-        team_a (np.array): Positional data for the first team.
-        team_b (np.array): Positional data for the second team.
+        team_a (np.ndarray): Trajectory for the first team.
+        team_b (np.ndarray): Trajectory for the second team.
 
     Returns:
-        team_a (np.array): Padded positional data for the first team.
-        team_b (np.array): Padded positional data for the second team.
+        team_a (np.ndarray): Cleaned trajectory for the first team.
+        team_b (np.ndarray): Cleaned trajectory for the second team.
     """
-    if team_a.shape == team_b.shape:
-        return team_a, team_b
     
-    pad_size = team_a.shape[1] - team_b.shape[1]
+    # TODO: Investigate missing agents, can we interpolate them or 
+    # pad in "the right" position
 
-    if pad_size < 0: # team b has more players
-        team_a = np.pad(team_a, ((0, 0), (0, -pad_size), (0, 0)), constant_values=0)
+    # Iterate timesteps with non-overlapping windows
+    # Count appearances of all agents
+    # Take most common 7 agents per window 
+    window_size = max(1, team_a.shape[0] // 4)
+    team_agents = []
+    for team in (team_a, team_b):
+        team_available = np.where(team)
+        active_agents = [np.unique(team_available[1][team_available[0] == t]) for t in range(team.shape[0])]
+        agents_at_t = []
+        cnt = Counter()
+        for t in range(0, len(active_agents), window_size):
+            cnt.clear()
+            for t_agents in active_agents[t : t + window_size]:
+                cnt.update(t_agents)
+
+            common_seven = [a for (a, _) in cnt.most_common(7)]
+            num_t = cnt.most_common(1)[0][1]
+            agents_at_t.extend([common_seven] * num_t)
+        team_agents.append(agents_at_t)
+    
+    agents_a, agents_b = team_agents
+    team_a_clean = np.zeros((team_a.shape[0], 7, 3))
+    team_b_clean = np.zeros((team_b.shape[0], 7, 3))
+    for t in range(team_a.shape[0]):
+        team_a_clean[t, 0:len(agents_a[t])] = team_a[t, agents_a[t]]
+        team_b_clean[t, 0:len(agents_b[t])] = team_b[t, agents_b[t]]
+
+    return team_a_clean, team_b_clean
+
+def ensure_ball_availability(ball_pos):
+    print(ball_pos.shape)
+    if (ball_pos == 0).all():
+        ball_pos = ball_pos[: ,0 ,:]
     else:
-        team_b = np.pad(team_b, ((0, 0), (0, pad_size), (0, 0)), constant_values=0)
+        ball_avail = np.where(ball_pos)
+        ball_pos = ball_pos[np.unique(ball_avail[0]), :, :]
 
-    return team_a, team_b
+    ball_pos = ball_pos.reshape(-1, 1, 3)
+    return ball_pos
 
 def mirror_positions(positions, horizontal=True, vertical=False, court_width=40, court_height=20):
     """Mirrors the given positions of players and ball on the court.
@@ -284,17 +321,22 @@ def mirror_positions(positions, horizontal=True, vertical=False, court_width=40,
     return positions
 
 if "__main__" == __name__:
-    data = HandballSyncedDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", 12, sampling_rate=2)
+    data = MultiModalHblDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", seq_len=8, sampling_rate=2, load_frames=True)
     from utils import array2gif, draw_trajectory
-    idx = 631762
+    idx = 8625
     instance = data[idx]
-    exit()
-    print("instance label", instance["label"], type(instance["label"]))
-    print("instance label idx", instance["label_offset"])
-    print("positions", instance["positions"])
+    print("All good")
+    # from tqdm import tqdm
+    # for i in tqdm(range(len(data))):
+    #     try:
+    #         data[i]
+    #     except:
+    #         print(i)
+    #         raise IndexError
     frames = instance["frames"]
+    frames = frames.transpose(1, 0, 2, 3)
+
     #[C, F, H, W]
-    frames = np.transpose(frames, (3, 0, 1, 2))
     positions = instance["positions"]
     array2gif(frames, f"./img/instance_{idx}.gif", 10)
     
