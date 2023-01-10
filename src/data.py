@@ -14,7 +14,15 @@ from torchvision.transforms import Compose
 
 class MultiModalHblDataset(Dataset):
 
-    def __init__(self, meta_path : str, seq_len : int = 8, sampling_rate : int = 1, load_frames : bool = True, transforms : Union[None, Compose] = None, label_mapping : callable = lambda x : x):
+    def __init__(
+        self,
+        meta_path : str,
+        seq_len : int = 8,
+        sampling_rate : int = 1,
+        load_frames : bool = True, 
+        transforms : Union[None, Compose] = None,
+        label_mapping : callable = lambda x : x,
+    ):       
         """
         This dataset provides a number of video frames (determined by seq_len) and
         corresponding positional data for ball and players.
@@ -28,6 +36,8 @@ class MultiModalHblDataset(Dataset):
             seq_len (int, optional): An even desired number of frames. Defaults to 8.
             sampling_rate (int, optional): Sample every nth frame. When set to 1, we sample subsequent frames corresponding to seq_len. Defaults to 1.
             load_frames (bool, optional): Whether to read and process images. Defaults to True.
+            transforms (Union[None, Compose], optional): Transforms to apply to the video frames. Defaults to None.
+            label_mapping (callable optional): A function that maps the label dictionary to an integer. Defaults to the identity function.
         """
         super(MultiModalHblDataset).__init__()
 
@@ -271,22 +281,24 @@ def ensure_correct_team_size(team_a, team_b):
     for team in (team_a, team_b):
         team_available = np.where(team)
         active_agents = [np.unique(team_available[1][team_available[0] == t]) for t in range(team.shape[0])]
-        agents_at_t = []
+        agents_per_timestep = [] # this will hold the downsized team at every timestep
         cnt = Counter()
+        # count unique agents in each window
         for t in range(0, len(active_agents), window_size):
             cnt.clear()
             for t_agents in active_agents[t : t + window_size]:
                 cnt.update(t_agents)
 
             common_seven = [a for (a, _) in cnt.most_common(7)]
-            num_t = cnt.most_common(1)[0][1]
-            agents_at_t.extend([common_seven] * num_t)
-        team_agents.append(agents_at_t)
+            window_timesteps = cnt.most_common(1)[0][1]
+            agents_per_timestep.extend([common_seven] * window_timesteps)
+        team_agents.append(agents_per_timestep)
     
     agents_a, agents_b = team_agents
     team_a_clean = np.zeros((team_a.shape[0], 7, 3))
     team_b_clean = np.zeros((team_b.shape[0], 7, 3))
     for t in range(team_a.shape[0]):
+        # assigning positions to an "empty" array also achieves padding 
         team_a_clean[t, 0:len(agents_a[t])] = team_a[t, agents_a[t]]
         team_b_clean[t, 0:len(agents_b[t])] = team_b[t, agents_b[t]]
 
