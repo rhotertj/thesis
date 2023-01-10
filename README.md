@@ -4,7 +4,12 @@
 
 Setting up the environment
 
-```
-conda env create && conda activate thesis
+```bash
+project_root> conda env create && conda activate thesis
 ```
 
+Downloading models
+
+```
+project_root> ./scripts/download_models.sh
+```
