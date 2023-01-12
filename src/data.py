@@ -12,6 +12,11 @@ from torchvision.transforms import Compose
 # TODO: Prepare different representation for positions
         # -> On the fly plotting might be too slow
 
+# TODO: Speed dataloading up by:
+#   - Moving images to local drive
+#   - Putting team downsizing in pre-processing
+#   - Putting team indicator in pre-processing 
+
 class MultiModalHblDataset(Dataset):
 
     def __init__(
@@ -127,7 +132,7 @@ class MultiModalHblDataset(Dataset):
             # Get correct match based on idx (match_number) and idx with respect to match and availability (frame_idx) 
             # from idx with respect to dataset (param: idx)
             # Add half sequence length to index to avoid underflowing dataset idx < seq_len
-            match_number, frame_idx = get_index_offset(self.index_tracker, self.idx_to_frame_number, idx + (self.seq_half * self.sampling_rate))
+            match_number, frame_idx = get_index_offset(self.index_tracker, self.idx_to_frame_number, idx, (self.seq_half * self.sampling_rate))
 
         frame_base_path = Path(self.frame_paths[match_number])
         events = self.event_dfs[match_number]
@@ -213,7 +218,18 @@ class MultiModalHblDataset(Dataset):
     def export_json(self, idx):
         """Generate trajectory in json format for internal visualization tool.
         """
-        raise NotImplementedError()
+        positions = self[idx]["positions"]
+        team_a = positions[:, :7].tolist()
+        team_b = positions[:, 7:14].tolist()
+        ball = positions[:, 14].tolist()
+
+        jd = {}
+        jd["team_a"] = team_a
+        jd["team_b"] = team_b
+        jd["balls"] = ball
+        return jd
+
+        return
 
 
 def check_label_within_slice(window_idx, index, sampling_rate):
@@ -236,7 +252,7 @@ def check_label_within_slice(window_idx, index, sampling_rate):
             return idx 
     
 
-def get_index_offset(boundaries, idx2frame, idx):
+def get_index_offset(boundaries, idx2frame, idx, half_range):
     """The dataset is indexed by frames and positions based on sequence length - not all frames have positional data.
     This function maps the index w.r.t. the dataset to the the match (mapping) and the frame number (offset)
 
@@ -244,6 +260,7 @@ def get_index_offset(boundaries, idx2frame, idx):
         boundaries (List[int]): Dataset indices that belong to the next match
         idx2frame (List[np.array]): Mapping from idx to frame number per match
         idx (int): Index wrt. dataset
+        half_range (int): Half of the sequence length, multiplied by the sampling rate.
 
     Returns:
         match_number (int): Match number for given index
@@ -253,7 +270,7 @@ def get_index_offset(boundaries, idx2frame, idx):
         if i <= idx and idx < j:
             match_number = match
             offset = idx - boundaries[match]
-            frame_idx = idx2frame[match][offset]
+            frame_idx = idx2frame[match][offset] + half_range
             return match_number, frame_idx
     
 # TODO: Move to preprocessing
@@ -286,12 +303,14 @@ def ensure_correct_team_size(team_a, team_b):
         # count unique agents in each window
         for t in range(0, len(active_agents), window_size):
             cnt.clear()
+            window_timesteps = 0 # last window is probably smaller than window size
             for t_agents in active_agents[t : t + window_size]:
                 cnt.update(t_agents)
+                window_timesteps += 1
 
             common_seven = [a for (a, _) in cnt.most_common(7)]
-            window_timesteps = cnt.most_common(1)[0][1]
             agents_per_timestep.extend([common_seven] * window_timesteps)
+
         team_agents.append(agents_per_timestep)
     
     agents_a, agents_b = team_agents
@@ -305,7 +324,6 @@ def ensure_correct_team_size(team_a, team_b):
     return team_a_clean, team_b_clean
 
 def ensure_ball_availability(ball_pos):
-    print(ball_pos.shape)
     if (ball_pos == 0).all():
         ball_pos = ball_pos[: ,0 ,:]
     else:
@@ -333,11 +351,14 @@ def mirror_positions(positions, horizontal=True, vertical=False, court_width=40,
     return positions
 
 if "__main__" == __name__:
-    data = MultiModalHblDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", seq_len=8, sampling_rate=2, load_frames=True)
+    data = MultiModalHblDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", seq_len=16, sampling_rate=2, load_frames=True)
     from utils import array2gif, draw_trajectory
-    idx = 8625
+    idx = 745124
     instance = data[idx]
+    # data.export_json(idx)
+    # exit(0)
     print("All good")
+    # breaks at 745124
     # from tqdm import tqdm
     # for i in tqdm(range(len(data))):
     #     try:
