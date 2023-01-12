@@ -4,6 +4,11 @@ from torchvision import transforms
 
 from data import MultiModalHblDataset
 
+def has_action(x):
+    if x == {}:
+        return 0
+    return 1
+
 class LitHandballSynced(pl.LightningDataModule):
     def __init__(self, meta_path : str, seq_len : int = 8, sampling_rate : int = 1, load_frames : bool = True, batch_size : int = 1) -> None:
         super().__init__()
@@ -21,7 +26,8 @@ class LitHandballSynced(pl.LightningDataModule):
             self.seq_len,
             self.sampling_rate,
             self.load_frames,
-            self.transforms
+            self.transforms,
+            has_action
         )
         # TODO: Choose games for train val test split and create individual meta files for them
         # Use 'stage' to load test only or train val or both
