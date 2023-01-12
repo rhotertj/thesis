@@ -1,8 +1,8 @@
 # pytorch_lightning==1.8.1
 fit:
-  seed_everything: true
+  seed_everything: 42
   trainer:
-    logger: true
+    logger: WandbLogger
     enable_checkpointing: true
     callbacks: null
     default_root_dir: null
@@ -10,7 +10,7 @@ fit:
     gradient_clip_algorithm: null
     num_nodes: 1
     num_processes: null
-    devices: null
+    devices: 1
     gpus: null
     auto_select_gpus: false
     tpu_cores: null
@@ -18,10 +18,10 @@ fit:
     enable_progress_bar: true
     overfit_batches: 0.0
     track_grad_norm: -1
-    check_val_every_n_epoch: 1
+    check_val_every_n_epoch: 5
     fast_dev_run: false
-    accumulate_grad_batches: null
-    max_epochs: null
+    accumulate_grad_batches: 16
+    max_epochs: 5
     min_epochs: null
     max_steps: -1
     min_steps: null
@@ -32,7 +32,7 @@ fit:
     limit_predict_batches: null
     val_check_interval: null
     log_every_n_steps: 50
-    accelerator: null
+    accelerator: "gpu"
     strategy: null
     sync_batchnorm: false
     precision: 32
