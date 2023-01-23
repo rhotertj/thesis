@@ -25,7 +25,7 @@ DATA_SOURCE = Path("/nfs/data/mm4spa/mm_hbl/hbl_19-20")
 
 EVENTS_PATH = Path("/nfs/home/rhotertj/datasets/hbl/events")
 POSITIONS_PATH = Path("/nfs/home/rhotertj/datasets/hbl/positions")
-FRAMES_PATH = Path("/nfs/home/rhotertj/datasets/hbl/frames_2997")
+FRAMES_PATH = Path("/data/hbl_rawframes/frames_2997")
 VIDEO_PATH = Path("/nfs/home/rhotertj/datasets/hbl/videos")
 META_PATH = Path("/nfs/home/rhotertj/datasets/hbl/")
 
