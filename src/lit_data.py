@@ -1,8 +1,8 @@
 from torch.utils.data import DataLoader, random_split
 import pytorch_lightning as pl
 from torchvision import transforms
-from video_transforms import FrameSequenceToTensor
-from utils import has_action
+from video_transforms import FrameSequenceToTensor, NormalizeVideo
+from utils import has_action, shot_pass_background
 
 from data import MultiModalHblDataset
 
@@ -14,7 +14,7 @@ class LitHandballSynced(pl.LightningDataModule):
         self.sampling_rate = sampling_rate
         self.load_frames = load_frames
         self.batch_size = batch_size
-        self.transforms = transforms.Compose([FrameSequenceToTensor(), transforms.CenterCrop(224)]) # TODO add normalize
+        self.transforms = transforms.Compose([FrameSequenceToTensor(), transforms.CenterCrop(224), NormalizeVideo([0.39449842, 0.4566527, 0.49926605], [0.18728599, 0.21862774, 0.267905])]) # TODO add normalize
 
 
     def setup(self, stage : str):
@@ -24,7 +24,7 @@ class LitHandballSynced(pl.LightningDataModule):
             self.sampling_rate,
             self.load_frames,
             self.transforms,
-            has_action
+            shot_pass_background
         )
         # TODO: Choose games for train val test split and create individual meta files for them
         # Use 'stage' to load test only or train val or both

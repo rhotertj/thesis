@@ -21,13 +21,13 @@ fit:
     check_val_every_n_epoch: 1
     fast_dev_run: false
     accumulate_grad_batches: 16
-    max_epochs: 5
+    max_epochs: 10
     min_epochs: null
     max_steps: -1
     min_steps: null
     max_time: null
     limit_train_batches: 0.5
-    limit_val_batches: 0.4
+    limit_val_batches: 0.2
     limit_test_batches: null
     limit_predict_batches: null
     val_check_interval: null
@@ -56,7 +56,7 @@ fit:
   model:
     pretrained_path: "models/mvit_b_16x4.pt"
     learning_rate: 0.1
-    num_classes: 2
+    num_classes: 3
   data:
     meta_path: "/nfs/home/rhotertj/datasets/hbl/meta3d.csv"
     seq_len: 16
