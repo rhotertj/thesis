@@ -1,13 +1,10 @@
 from torch.utils.data import DataLoader, random_split
 import pytorch_lightning as pl
 from torchvision import transforms
+from video_transforms import FrameSequenceToTensor
+from utils import has_action
 
 from data import MultiModalHblDataset
-
-def has_action(x):
-    if x == {}:
-        return 0
-    return 1
 
 class LitHandballSynced(pl.LightningDataModule):
     def __init__(self, meta_path : str, seq_len : int = 8, sampling_rate : int = 1, load_frames : bool = True, batch_size : int = 1) -> None:
@@ -17,7 +14,7 @@ class LitHandballSynced(pl.LightningDataModule):
         self.sampling_rate = sampling_rate
         self.load_frames = load_frames
         self.batch_size = batch_size
-        self.transforms = transforms.Compose([transforms.CenterCrop(224)])
+        self.transforms = transforms.Compose([FrameSequenceToTensor(), transforms.CenterCrop(224)]) # TODO add normalize
 
 
     def setup(self, stage : str):
@@ -49,3 +46,4 @@ class LitHandballSynced(pl.LightningDataModule):
     def teardown(self, stage: str) -> None:
         # Nothing to do here (yet)
         pass
+
