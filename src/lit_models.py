@@ -5,7 +5,9 @@ import torch
 from torchvision.transforms.functional import center_crop
 import numpy as np
 import seaborn as sns
+import PIL
 
+from utils import draw_trajectory
 from video_models import make_kinetics_mvit
 
 
@@ -31,9 +33,7 @@ class LitMViT(pl.LightningModule):
         # training_step defines the train loop.
         # print(batch)
         x = batch["frames"]
-        print(x.shape)
         targets = batch["label"]
-        print(targets)
         y = self.model(x)
         
         loss = self.loss(y, targets)
@@ -44,18 +44,33 @@ class LitMViT(pl.LightningModule):
         self.log("train/epoch_loss", np.mean([item["loss"].item() for item in outputs]))
 
     def validation_step(self, batch, batch_idx):
-        pass
-        # loss = ...
-        # acc = ...
-        # fig = ...
-        # wandb.log({"val/plot_trajectory": wandb.Image(fig)})
+        x = batch["frames"]
+        targets = batch["label"]
+        y = self.model(x)
+        
+        loss = self.loss(y, targets)
+        self.log("val/batch_loss", loss)
+        acc = torch.sum(targets == y.argmax(-1)) / len(targets)
+        self.log("val/batch_acc", acc)
 
-        # return {"loss" : loss.item(), "acc" : acc.item()}
+        if batch_idx == 0:
+            frames = x.detach().cpu().numpy()
+            frames = (frames * 255).astype(np.uint8)
+            trajectory = batch["positions"].detach().cpu().numpy()
+
+            for b in range(batch["frames"].shape[0]):
+                positions = trajectory[b]
+                fig = draw_trajectory(positions)
+                wandb.log({"val/trajectory": wandb.Image(fig)})
+
+                images = frames[b].transpose(1, 0, 2, 3)
+                wandb.log({"video": wandb.Video(images, fps=10, format="gif", caption=f"Predicted: {y[b]}, Ground Truth: {targets[b]}, Index {batch_idx}")})
+        return {"loss" : loss.item(), "acc" : acc.item()}
 
     def validation_epoch_end(self, outputs) -> None:
-        pass
-        # self.log("val/acc", np.mean([output["acc"] for output in outputs]))
-        # self.log("val/loss", np.mean([output["loss"] for output in outputs]))
+        # TODO: Log confusion matrix
+        self.log("val/acc", np.mean([output["acc"] for output in outputs]))
+        self.log("val/loss", np.mean([output["loss"] for output in outputs]))
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=(self.lr or self.learning_rate))

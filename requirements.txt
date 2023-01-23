@@ -1,8 +1,12 @@
 opencv-python-headless
 pytorch_lightning[extra]
+imagio
+moviepy
 pytorchvideo
 torch 
 torchvideo
 fvcore
 av
 floodlight
+torch-geometric
+networkx
