@@ -13,7 +13,6 @@ from torchvision.transforms import Compose
         # -> On the fly plotting might be too slow
 
 # TODO: Speed dataloading up by:
-#   - Moving images to local drive
 #   - Putting team downsizing in pre-processing
 #   - Putting team indicator in pre-processing 
 
@@ -86,11 +85,17 @@ class MultiModalHblDataset(Dataset):
         for *_, availability in self.position_arrays:
             sample_range = self.seq_len * self.sampling_rate
             kernel = np.ones(sample_range)
+            # Make sure that we have positions along the whole sequence.
             available_windows_cvn = np.convolve(availability, kernel) # previously used mode='valid'
             available_windows = np.where(available_windows_cvn == sample_range)[0] - (sample_range - 1)
 
             self.idx_to_frame_number.append(available_windows)
-            self.index_tracker.append(int(self.index_tracker[-1] + len(available_windows)))
+            # Only the first half is annotated. We need to create a boundary before the last action.
+            # We take the third last since we have annotated actions when position tracking was already paused.
+            last_event = self.event_dfs[len(self.index_tracker) - 1].index[-3] - self.seq_len
+            last_window = np.where(available_windows == last_event)[0][0]
+            self.index_tracker.append(self.index_tracker[-1] + len(available_windows[:last_window]))
+
 
 
     def __len__(self):
@@ -106,7 +111,7 @@ class MultiModalHblDataset(Dataset):
 
     def __getitem__(self, idx, frame_idx : Union[None, int] = None, match_number : Union[None, int] = None, positions_offset : int = 0) -> dict:
         """This method returns 
-            - stacked frames (RGB) of shape [F x H x W x C]
+            - stacked frames (RGB) of shape [T x H x W x C]
             - corresponding positional data for players and ball
             - the corresponding event label
             - the annotated event position in the frame stack.
@@ -132,11 +137,13 @@ class MultiModalHblDataset(Dataset):
             # Get correct match based on idx (match_number) and idx with respect to match and availability (frame_idx) 
             # from idx with respect to dataset (param: idx)
             # Add half sequence length to index to avoid underflowing dataset idx < seq_len
-            match_number, frame_idx = get_index_offset(self.index_tracker, self.idx_to_frame_number, idx, (self.seq_half * self.sampling_rate))
+            match_number, frame_idx = get_index_offset(self.index_tracker, self.idx_to_frame_number, idx)
+            frame_idx += (self.seq_half * self.sampling_rate)
 
         frame_base_path = Path(self.frame_paths[match_number])
         events = self.event_dfs[match_number]
         frames = []
+        window_indices = [] # debug information
         
         label = {} # Default to 'background' action
         label_offset = 0 # Which frame of the window is portraying the action
@@ -144,6 +151,7 @@ class MultiModalHblDataset(Dataset):
         # Iterate over window, load frames and check for event
         half_range = self.seq_half * self.sampling_rate
         for window_idx in range(frame_idx - half_range, frame_idx + half_range, self.sampling_rate):
+            window_indices.append(window_idx)
             if window_idx in events.index:
                 label = events.loc[window_idx].labels
                 label_offset = ((window_idx - frame_idx) + half_range) // self.sampling_rate
@@ -162,11 +170,8 @@ class MultiModalHblDataset(Dataset):
 
         if self.load_frames:
             frames = np.stack(frames)
-            frames = frames.transpose(0, 3, 1, 2)
             if self.transforms:
-                frames = torch.FloatTensor(frames)
                 frames = self.transforms(frames)
-                frames = frames.permute(1, 0, 2, 3)
 
         team_a_pos, team_b_pos, ball_pos, _ = self.position_arrays[match_number]
         
@@ -211,7 +216,12 @@ class MultiModalHblDataset(Dataset):
             "frames" : frames,
             "positions" : all_pos,
             "label" : label, 
-            "label_offset" : label_offset
+            "label_offset" : label_offset,
+            "frame_idx" : frame_idx,
+            "query_idx" : idx,
+            "window_indices" : window_indices,
+            "match_number" : match_number
+
         }
         return instance
 
@@ -229,8 +239,6 @@ class MultiModalHblDataset(Dataset):
         jd["balls"] = ball
         return jd
 
-        return
-
 
 def check_label_within_slice(window_idx, index, sampling_rate):
     """Checks whether an annotation exists for the current window slice that gets overlooked
@@ -247,12 +255,11 @@ def check_label_within_slice(window_idx, index, sampling_rate):
     if sampling_rate == 1:
         return False
     # Resample the entire range with sampling rate 1
-    for idx in range(window_idx - sampling_rate, window_idx + sampling_rate):
+    for idx in range(window_idx, window_idx + sampling_rate):
         if idx in index:
-            return idx 
-    
+            return idx     
 
-def get_index_offset(boundaries, idx2frame, idx, half_range):
+def get_index_offset(boundaries, idx2frame, idx):
     """The dataset is indexed by frames and positions based on sequence length - not all frames have positional data.
     This function maps the index w.r.t. the dataset to the the match (mapping) and the frame number (offset)
 
@@ -260,7 +267,6 @@ def get_index_offset(boundaries, idx2frame, idx, half_range):
         boundaries (List[int]): Dataset indices that belong to the next match
         idx2frame (List[np.array]): Mapping from idx to frame number per match
         idx (int): Index wrt. dataset
-        half_range (int): Half of the sequence length, multiplied by the sampling rate.
 
     Returns:
         match_number (int): Match number for given index
@@ -270,8 +276,11 @@ def get_index_offset(boundaries, idx2frame, idx, half_range):
         if i <= idx and idx < j:
             match_number = match
             offset = idx - boundaries[match]
-            frame_idx = idx2frame[match][offset] + half_range
+            frame_idx = idx2frame[match][offset]
+
             return match_number, frame_idx
+
+    raise IndexError(f"{idx} could not be found with boundaries {boundaries}.")
     
 # TODO: Move to preprocessing
 def ensure_correct_team_size(team_a, team_b):
@@ -353,8 +362,9 @@ def mirror_positions(positions, horizontal=True, vertical=False, court_width=40,
 if "__main__" == __name__:
     data = MultiModalHblDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", seq_len=16, sampling_rate=2, load_frames=True)
     from utils import array2gif, draw_trajectory
-    idx = 745124
+    idx = 170916
     instance = data[idx]
+    # instance = data.__getitem__(idx, frame_idx=81595, match_number=1)
     # data.export_json(idx)
     # exit(0)
     print("All good")
@@ -367,13 +377,10 @@ if "__main__" == __name__:
     #         print(i)
     #         raise IndexError
     frames = instance["frames"]
-    frames = frames.transpose(1, 0, 2, 3)
-
-    #[C, F, H, W]
     positions = instance["positions"]
-    array2gif(frames, f"./img/instance_{idx}.gif", 10)
+    array2gif(frames, f"./img/instance_{instance['query_idx']}.gif", 10)
     
     fig = draw_trajectory(positions)
-    fig.savefig(f"./img/instance_{idx}.png")
+    fig.savefig(f"./img/instance_{instance['query_idx']}.png")
     
 
