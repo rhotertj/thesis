@@ -1,6 +1,6 @@
 from torch.utils.data import DataLoader, random_split
 import pytorch_lightning as pl
-from torchvision import transforms
+from torchvision import transforms as t
 from video_transforms import FrameSequenceToTensor, NormalizeVideo
 from utils import has_action, shot_pass_background
 
@@ -14,7 +14,15 @@ class LitHandballSynced(pl.LightningDataModule):
         self.sampling_rate = sampling_rate
         self.load_frames = load_frames
         self.batch_size = batch_size
-        self.transforms = transforms.Compose([FrameSequenceToTensor(), transforms.CenterCrop(224), NormalizeVideo([0.39449842, 0.4566527, 0.49926605], [0.18728599, 0.21862774, 0.267905])]) # TODO add normalize
+        self.transforms = t.Compose([
+            FrameSequenceToTensor(),
+            t.Resize((224,224)),
+            # t.CenterCrop(224),
+            # NormalizeVideo(
+            #     mean=[0.39449842, 0.4566527, 0.49926605],
+            #     std=[0.18728599, 0.21862774, 0.267905]
+            #     ),
+            ])
 
 
     def setup(self, stage : str):
@@ -28,7 +36,6 @@ class LitHandballSynced(pl.LightningDataModule):
         )
         # TODO: Choose games for train val test split and create individual meta files for them
         # Use 'stage' to load test only or train val or both
-        # Think about transforms for both modalities :)
         self.data_train, self.data_val, self.data_test = random_split(self.data_full, [0.7, 0.15, 0.15])
 
     def train_dataloader(self):
