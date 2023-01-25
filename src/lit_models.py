@@ -17,7 +17,10 @@ class LitMViT(pl.LightningModule):
         self,
         pretrained_path : str,
         learning_rate : float,
-        num_classes : int
+        num_classes : int,
+        momentum : float,
+        weight_decay : float,
+        max_epochs : int
     ) -> None:
         super().__init__()
         self.model = make_kinetics_mvit(pretrained_path, num_classes)
@@ -27,6 +30,9 @@ class LitMViT(pl.LightningModule):
 
         self.lr = learning_rate
         self.loss = torch.nn.CrossEntropyLoss()
+        self.momentum = momentum
+        self.weight_decay = weight_decay
+        self.max_epochs = max_epochs
         
 
     def training_step(self, batch, batch_idx):
@@ -41,6 +47,7 @@ class LitMViT(pl.LightningModule):
         return loss
 
     def training_epoch_end(self, outputs):
+        print("train/worst10", torch.tensor(np.argsort([item["loss"].item() for item in outputs])[:-10]))
         self.log("train/epoch_loss", np.mean([item["loss"].item() for item in outputs]))
 
     def validation_step(self, batch, batch_idx):
@@ -64,7 +71,7 @@ class LitMViT(pl.LightningModule):
                 wandb.log({"val/trajectory": wandb.Image(fig)})
 
                 images = frames[b].transpose(1, 0, 2, 3)
-                wandb.log({"video": wandb.Video(images, fps=10, format="gif", caption=f"Predicted: {y[b]}, Ground Truth: {targets[b]}, Index {batch_idx}")})
+                wandb.log({"video": wandb.Video(images, fps=10, format="gif", caption=f"Predicted: {y[b]}, Ground Truth: {targets[b]}, Index {batch['frame_idx']} {batch['match_number']}")})
         return {"loss" : loss.item(), "acc" : acc.item()}
 
     def validation_epoch_end(self, outputs) -> None:
@@ -73,4 +80,13 @@ class LitMViT(pl.LightningModule):
         self.log("val/loss", np.mean([output["loss"] for output in outputs]))
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=(self.lr or self.learning_rate))
+        optimizer = torch.optim.SGD(
+            self.parameters(),
+            lr=(self.lr or self.learning_rate),
+            momentum = self.momentum,
+            weight_decay = self.weight_decay,
+        )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, self.max_epochs, last_epoch=-1
+        )
+        return [optimizer], [scheduler]
