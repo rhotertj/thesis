@@ -16,18 +16,18 @@ fit:
     tpu_cores: null
     ipus: null
     enable_progress_bar: true
-    overfit_batches: 0.0
+    overfit_batches: false
     track_grad_norm: -1
-    check_val_every_n_epoch: 1
+    check_val_every_n_epoch: 5
     fast_dev_run: false
     accumulate_grad_batches: 16
-    max_epochs: 10
+    max_epochs: 50
     min_epochs: null
     max_steps: -1
     min_steps: null
     max_time: null
-    limit_train_batches: 0.5
-    limit_val_batches: 0.2
+    limit_train_batches: 0.1
+    limit_val_batches: 0.1
     limit_test_batches: null
     limit_predict_batches: null
     val_check_interval: null
@@ -37,7 +37,7 @@ fit:
     sync_batchnorm: false
     precision: 32
     enable_model_summary: true
-    num_sanity_val_steps: 2
+    num_sanity_val_steps: 1
     resume_from_checkpoint: null
     profiler: null
     benchmark: null
@@ -55,12 +55,12 @@ fit:
     inference_mode: true
   model:
     pretrained_path: "models/mvit_b_16x4.pt"
-    learning_rate: 0.1
+    learning_rate: 0.01
     num_classes: 3
   data:
     meta_path: "/nfs/home/rhotertj/datasets/hbl/meta3d.csv"
     seq_len: 16
-    sampling_rate: 2
+    sampling_rate: 4
     load_frames: true
     batch_size: 2
   ckpt_path: null
