@@ -1,9 +1,9 @@
 seed_everything: 43
-stage: fit
+stage: validate
 logger:
   project: thesis_mvit
 trainer: # logger extra
-  default_root_dir: "/nfs/home/rhotertj/Code/thesis/experiments/mvit"
+  default_root_dir: "experiments/mvit/"
   num_nodes: 1
   devices: 1
   overfit_batches: false # change int of n batches to debug with n batches
@@ -27,9 +27,8 @@ data:
   batch_size: 2
 model:
   pretrained_path: "models/mvit_b_16x4.pt"
-  #T_max: 50 # max epochs
   learning_rate: 0.01
   momentum: 0.9
   weight_decay: 1e-4
   num_classes: 3
-checkpoint: ""
+checkpoint: thesis_mvit/9kwdvmtl/checkpoints/epoch=29-step=37920.ckpt
