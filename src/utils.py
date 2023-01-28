@@ -3,6 +3,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
+def plot_confmat(confmat):
+    plt.close()
+    fig = plt.figure()
+    sns.set(font_scale=1.4) # for label size
+    sns.heatmap(confmat, annot=True, annot_kws={"size": 16}) # font size
+    return fig
+
+
 def draw_trajectory(positions : np.ndarray):
     """Plots player and ball positions as a scatterplot.
     Positions of the past become transparent.
