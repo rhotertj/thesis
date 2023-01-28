@@ -1,5 +1,6 @@
 import pytorch_lightning as pl
 from pytorch_lightning.cli import LightningCLI
+import torchmetrics as tm
 import wandb
 import torch
 from torchvision.transforms.functional import center_crop
@@ -7,7 +8,7 @@ import numpy as np
 import seaborn as sns
 import PIL
 
-from utils import draw_trajectory
+from utils import draw_trajectory, plot_confmat
 from video_models import make_kinetics_mvit
 
 
@@ -33,7 +34,29 @@ class LitMViT(pl.LightningModule):
         self.momentum = momentum
         self.weight_decay = weight_decay
         self.max_epochs = max_epochs
-        
+
+        self.train_accuracy = tm.Accuracy(
+            threshold=0.5,
+            num_classes=num_classes,
+            multiclass=True
+        )
+
+        self.val_accuracy = tm.Accuracy(
+            threshold=0.5,
+            num_classes=num_classes,
+            multiclass=True
+        )
+
+        # only use for validation! 
+        self.ground_truths = []
+        self.predictions = []
+        self.confidences = []
+        self.class_names = ["Background", "Pass", "Shot"]
+
+    
+    def forward(self, input):
+        x = input["frames"]
+        return self.model(x)
 
     def training_step(self, batch, batch_idx):
         # training_step defines the train loop.
@@ -44,11 +67,15 @@ class LitMViT(pl.LightningModule):
         
         loss = self.loss(y, targets)
         self.log("train/batch_loss", loss)
+
+        batch_acc = self.train_accuracy(y, targets)
+        self.log("train/batch_acc", batch_acc)
         return loss
 
     def training_epoch_end(self, outputs):
-        print("train/worst10", torch.tensor(np.argsort([item["loss"].item() for item in outputs])[:-10]))
         self.log("train/epoch_loss", np.mean([item["loss"].item() for item in outputs]))
+        self.log("train/epoch_acc", self.train_accuracy.compute())
+        self.train_accuracy.reset()
 
     def validation_step(self, batch, batch_idx):
         x = batch["frames"]
@@ -57,27 +84,45 @@ class LitMViT(pl.LightningModule):
         
         loss = self.loss(y, targets)
         self.log("val/batch_loss", loss)
-        acc = torch.sum(targets == y.argmax(-1)) / len(targets)
-        self.log("val/batch_acc", acc)
+        
+        self.val_accuracy.update(y, targets)
+        soft_y = y.detach().cpu().softmax(dim=-1)
+        # save predicition and ground truth for validation metrics
+        for b in range(x.shape[0]):
+            self.predictions.append(soft_y[b].argmax().item())
+            self.confidences.append(soft_y[b])
+            self.ground_truths.append(targets[b].detach().cpu().item())
 
-        if batch_idx == 0:
-            frames = x.detach().cpu().numpy()
-            frames = (frames * 255).astype(np.uint8)
-            trajectory = batch["positions"].detach().cpu().numpy()
-
-            for b in range(batch["frames"].shape[0]):
-                positions = trajectory[b]
-                fig = draw_trajectory(positions)
-                wandb.log({"val/trajectory": wandb.Image(fig)})
-
-                images = frames[b].transpose(1, 0, 2, 3)
-                wandb.log({"video": wandb.Video(images, fps=10, format="gif", caption=f"Predicted: {y[b]}, Ground Truth: {targets[b]}, Index {batch['frame_idx']} {batch['match_number']}")})
-        return {"loss" : loss.item(), "acc" : acc.item()}
+        return {"loss" : loss.item()}
 
     def validation_epoch_end(self, outputs) -> None:
-        # TODO: Log confusion matrix
-        self.log("val/acc", np.mean([output["acc"] for output in outputs]))
+        self.log("val/acc", self.val_accuracy.compute())
         self.log("val/loss", np.mean([output["loss"] for output in outputs]))
+                
+        cm = wandb.plot.confusion_matrix(
+            y_true=self.ground_truths,
+            preds=self.predictions,
+            class_names=self.class_names,
+            title="Confusion Matrix")
+            
+        wandb.log({"val/conf_mat": cm})
+
+        self.confidences = torch.stack(self.confidences)
+        pr = wandb.plot.pr_curve(
+                self.ground_truths,
+                self.confidences,
+                labels=self.class_names,
+                title="Precision vs. Recall per class"
+            )
+
+        wandb.log({
+            "val/prec_rec": pr
+            })
+
+        self.ground_truths = []
+        self.predictions = []
+        self.confidences = []
+        self.val_accuracy.reset()
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(
