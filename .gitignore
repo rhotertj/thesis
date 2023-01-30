@@ -133,7 +133,7 @@ lightning_logs
 .lr_find*
 sample.json
 wandb
-experimental
+experiments
 checkpoints
 .vscode
 src/archive
@@ -142,4 +142,6 @@ img/class*
 img/match*
 dataset/occurences*
 dataset/class2frame*
+dataset/means*
+dataset/std*
 models
