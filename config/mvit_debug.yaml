@@ -5,9 +5,7 @@ logger:
   name: debug
   offline: false
 trainer: # logger extra
-  default_root_dir: "/experiments/mvit/debug"
-  num_nodes: 1
-  devices: 1
+  devices: 2
   overfit_batches: 20 # change int of n batches to debug with n batches
   check_val_every_n_epoch: 1
   accumulate_grad_batches: 16
@@ -22,7 +20,9 @@ trainer: # logger extra
   precision: 32
   num_sanity_val_steps: 1
 data:
-  meta_path: "/nfs/home/rhotertj/datasets/hbl/meta3d.csv"
+  meta_path_train: "/nfs/home/rhotertj/datasets/hbl/meta3d_train.csv"
+  meta_path_val: "/nfs/home/rhotertj/datasets/hbl/meta3d_val.csv"
+  meta_path_test: "/nfs/home/rhotertj/datasets/hbl/meta3d_test.csv"
   seq_len: 16
   sampling_rate: 4
   load_frames: true
@@ -34,3 +34,8 @@ model:
   weight_decay: 1e-4
   num_classes: 3
 checkpoint: ""
+callbacks:
+  checkpointing:
+    every_n: 1
+    dir: experiments/mvit/debug
+save_config: true
