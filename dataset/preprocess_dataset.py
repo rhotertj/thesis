@@ -177,6 +177,25 @@ def main():
         
         pos_available = sync.pos_available(pos_sets[0], pos_sets[1], value_check="zeros")
         pos_sets.append(pos_available)
+
+        vertical = [1, 2, 5, 6, 8, 10]
+        horizontal = [1, 2, 5, 6, 8, 10]
+
+        new_meta_df.loc[meta_df.index[match_number], "mirror_vertical"] = match_number in vertical
+        new_meta_df.loc[meta_df.index[match_number], "mirror_horizontal"] = match_number in horizontal
+
+        train = [0, 1, 3, 6, 9, 10]
+        val = [2, 7]
+        test = [8, 4]
+
+        if match_number in train:
+            stage = "train"
+        elif match_number in val:
+            stage = "val"
+        elif match_number in test:
+            stage = "test"
+        
+        new_meta_df.loc[meta_df.index[match_number], "stage"] = stage
         
         event_file = match_id2event_json[f"sr:sport_event:{meta_info.match_id_min}"]
         # print("Read", DATA_SOURCE / "events_its" / event_file)

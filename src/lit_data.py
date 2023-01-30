@@ -7,12 +7,28 @@ from utils import has_action, shot_pass_background
 from data import MultiModalHblDataset
 
 class LitHandballSynced(pl.LightningDataModule):
-    def __init__(self, meta_path : str, seq_len : int = 8, sampling_rate : int = 1, load_frames : bool = True, batch_size : int = 1) -> None:
+
+    def __init__(
+        self,
+        meta_path_train : str,
+        meta_path_val : str,
+        meta_path_test : str,
+        seq_len : int = 8,
+        sampling_rate : int = 1,
+        load_frames : bool = True,
+        label_mapping : callable = shot_pass_background,
+        batch_size : int = 1
+        ) -> None:
+
         super().__init__()
-        self.meta_path = meta_path
+        self.meta_path_train = meta_path_train
+        self.meta_path_val = meta_path_val
+        self.meta_path_test = meta_path_test
+
         self.seq_len = seq_len
         self.sampling_rate = sampling_rate
         self.load_frames = load_frames
+        self.label_mapping = label_mapping
         self.batch_size = batch_size
         self.transforms = t.Compose([
             FrameSequenceToTensor(),
@@ -26,17 +42,49 @@ class LitHandballSynced(pl.LightningDataModule):
 
 
     def setup(self, stage : str):
-        self.data_full = MultiModalHblDataset(
-            self.meta_path,
-            self.seq_len,
-            self.sampling_rate,
-            self.load_frames,
-            self.transforms,
-            shot_pass_background
-        )
-        # TODO: Choose games for train val test split and create individual meta files for them
-        # Use 'stage' to load test only or train val or both
-        self.data_train, self.data_val, self.data_test = random_split(self.data_full, [0.7, 0.15, 0.15])
+        print(stage)
+        match stage:
+
+            case "train":
+
+                self.data_train = MultiModalHblDataset(
+                    self.meta_path_train,
+                    self.seq_len,
+                    self.sampling_rate,
+                    self.load_frames,
+                    self.transforms,
+                    self.label_mapping
+                )
+                self.data_val = MultiModalHblDataset(
+                    self.meta_path_val,
+                    self.seq_len,
+                    self.sampling_rate,
+                    self.load_frames,
+                    self.transforms,
+                    self.label_mapping
+                )
+            
+            case "validate":
+
+                self.data_val = MultiModalHblDataset(
+                    self.meta_path_val,
+                    self.seq_len,
+                    self.sampling_rate,
+                    self.load_frames,
+                    self.transforms,
+                    self.label_mapping
+                )
+
+            case "test":
+
+                self.data_test = MultiModalHblDataset(
+                    self.meta_path_test,
+                    self.seq_len,
+                    self.sampling_rate,
+                    self.load_frames,
+                    self.transforms,
+                    self.label_mapping
+                )
 
     def train_dataloader(self):
         return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4,persistent_workers=True, pin_memory=True)

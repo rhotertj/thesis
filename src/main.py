@@ -1,8 +1,8 @@
 import pytorch_lightning as pl
-from pytorch_lightning.cli import LightningCLI
+from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
-import wandb
-import torch
+import os
+from pathlib import Path
 import numpy as np
 
 from lit_models import LitMViT
@@ -16,10 +16,7 @@ def main(conf):
     logger = WandbLogger(
         **conf.logger
     )
-    trainer = pl.Trainer(
-        logger=logger,
-        **conf.trainer
-    )
+    
 
     conf.model.max_epochs = conf.trainer.max_epochs
 
@@ -32,6 +29,34 @@ def main(conf):
     )
     lit_data.setup(conf.stage)
 
+    callbacks = []
+
+    # create experiment directory
+    exp_dir = Path(conf.callbacks.checkpointing.dir)
+    previous_experiments = [f for f in os.listdir(exp_dir) if os.path.isdir(exp_dir / f)]
+    next_dir = str(len(previous_experiments) + 1)
+    exp_dir = exp_dir / next_dir
+    os.makedirs(exp_dir)
+
+    if conf.save_config:
+        with open(exp_dir/"config.yaml", "w+") as f:
+            f.write(omcon.to_yaml(conf))
+
+
+    checkpoint_cb = ModelCheckpoint(
+        dirpath=exp_dir,
+        every_n_epochs=conf.callbacks.checkpointing.every_n,
+
+    )
+
+    callbacks.append(checkpoint_cb)
+
+    trainer = pl.Trainer(
+        logger=logger,
+        **conf.trainer,
+        callbacks=callbacks
+    )
+
     match conf.stage:
 
         case "train":
@@ -39,7 +64,7 @@ def main(conf):
             trainer.fit(
                 model,
                 train_dataloaders=lit_data.train_dataloader(),
-                val_dataloaders=lit_data.val_dataloader()
+                val_dataloaders=lit_data.val_dataloader(),
                 )
         
         case "validate":
@@ -66,6 +91,7 @@ if "__main__" == __name__:
 
     args = parser.parse_args()
     conf = omcon.load(args.file)
+    # overwrite file config from cli
     if args.config:
         cli_conf = omcon.from_dotlist(args.config)
         conf = omcon.merge(conf, cli_conf)
