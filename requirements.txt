@@ -9,4 +9,6 @@ fvcore
 av
 floodlight
 torch-geometric
+torch-sparse
+torch-scatter
 networkx
