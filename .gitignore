@@ -137,9 +137,7 @@ experiments
 checkpoints
 .vscode
 src/archive
-img/instance*
-img/class*
-img/match*
+img/
 dataset/occurences*
 dataset/class2frame*
 dataset/means*
