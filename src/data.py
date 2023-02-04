@@ -39,10 +39,12 @@ class MultiModalHblDataset(Dataset):
         Args:
             meta_path (str): Path to the .csv file that holds paths to frames, annotations and positions.
             seq_len (int, optional): An even desired number of frames. Defaults to 8.
-            sampling_rate (int, optional): Sample every nth frame. When set to 1, we sample subsequent frames corresponding to seq_len. Defaults to 1.
+            sampling_rate (int, optional): Sample every nth frame. When set to 1, we sample subsequent frames
+                corresponding to seq_len. Defaults to 1.
             load_frames (bool, optional): Whether to read and process images. Defaults to True.
             transforms (Union[None, Compose], optional): Transforms to apply to the video frames. Defaults to None.
-            label_mapping (callable optional): A function that maps the label dictionary to an integer. Defaults to the identity function.
+            label_mapping (callable optional): A function that maps the label dictionary to an integer. 
+                Defaults to the identity function.
         """
         super(MultiModalHblDataset).__init__()
 
@@ -121,7 +123,8 @@ class MultiModalHblDataset(Dataset):
             - the corresponding event label
             - the annotated event position in the frame stack.
 
-        Note that the provided index is valid over the whole dataset. It can not be treated as a frame number or index for a given match.
+        Note that the provided index is valid over the whole dataset.
+        It can not be treated as a frame number or index for a given match.
         It first needs to be matched against a match and a frame number, based on the availability of positional data.
 
         If we need to access a specific set of frames, we can access them by using the keyword arguments. 
@@ -211,7 +214,6 @@ class MultiModalHblDataset(Dataset):
             ball_z = np.zeros((ball_pos.shape[0], 1, 1))
             ball_pos = np.concatenate([ball_pos, ball_z], axis=-1)
 
-        # ball_pos = ensure_ball_availability(ball_pos)
         all_pos = np.hstack([teams_pos, ball_pos])
 
         all_pos = mirror_positions(
@@ -343,18 +345,13 @@ def ensure_correct_team_size(team_a, team_b):
     return team_a_clean, team_b_clean
 
 
-def ensure_ball_availability(ball_pos):
-    if (ball_pos == 0).all():
-        ball_pos = ball_pos[:, 0, :]
-    else:
-        ball_avail = np.where(ball_pos)
-        ball_pos = ball_pos[np.unique(ball_avail[0]), :, :]
-
-    ball_pos = ball_pos.reshape(-1, 1, 3)
-    return ball_pos
-
-
-def mirror_positions(positions, horizontal=True, vertical=False, court_width=40, court_height=20):
+def mirror_positions(
+    positions: np.ndarray,
+    horizontal: bool = True,
+    vertical: bool = False,
+    court_width: int = 40,
+    court_height: int = 20
+):
     """Mirrors the given positions of players and ball on the court.
     Horizontal mirroring effectively switches sides whereas vertical mirroring
     switches left and right.
@@ -363,6 +360,8 @@ def mirror_positions(positions, horizontal=True, vertical=False, court_width=40,
         positions (np.ndarray): Player and ball positions.
         horizontal (bool, optional): Mirror horizontally. Defaults to False.
         vertical (bool, optional): Mirror vertically. Defaults to True.
+        court_width (int, optional): Court width in meters. Defaults to 40.
+        court_height (int, optional): Court height in meters. Defaults to 20.
     """
     if vertical:
         positions[:, :, 1] = court_height - positions[:, :, 1]
@@ -374,74 +373,102 @@ def mirror_positions(positions, horizontal=True, vertical=False, court_width=40,
 
 class LabelDecoder:
 
-    def __init__(self, num_classes) -> None:
+    def __init__(self, num_classes: int) -> None:
+        """Infers class names and their integer mapping
+        from the number of classes. 
+
+        Args:
+            num_classes (int): Number of classes.
+        """
         self.num_classes = num_classes
         self.class_names = self.get_classnames()
         self.decode_event = self.choose_label_mapping()
 
-    def __call__(self, x):
+    def __call__(self, x: dict) -> int:
+        """Maps the input to an integer.
+
+        Args:
+            x (dict): The event annotation.
+
+        Returns:
+            int: Integer label.
+        """
         return self.decode_event(x)
 
-    def get_classnames(self):
+    def get_classnames(self) -> list[str]:
+        """Returns the classnames based on the number of classes.
+
+        Returns:
+            list[str]: Class names.
+        """
         if self.num_classes == 2:
             return ["Background", "Action"]
 
-        cls_names = [
-            "Background",
-            "Pass",
-            "Shot",
-            "Foul"
-        ]
+        cls_names = ["Background", "Pass", "Shot", "Foul"]
         return cls_names[:self.num_classes]
 
-    def choose_label_mapping(self):
-        match self.num_classes:
-            
-            case 2:
-                return self.has_action
-            case 3:
-                return self.background_pass_shot
-            case 4:
-                return self.background_pass_shot_foul
-            case _:
-                raise ValueError(f"Number of classes ({self.num_classes}) is invalid!")
+    def choose_label_mapping(self) -> callable:
+        """Choose correct function to decode event annotations based on the number of classes.
 
-    def has_action(self, x):
+        Raises:
+            ValueError: Unknown number of classes.
+
+        Returns:
+            callable: Function that maps annotations to integers.
+        """
+        if self.num_classes == 2:
+            return self.has_action
+        if self.num_classes == 3:
+            return self.background_pass_shot
+        if self.num_classes == 4:
+            return self.background_pass_shot_foul
+        else:
+            raise ValueError(f"Number of classes ({self.num_classes}) is invalid!")
+
+    def has_action(self, x: dict):
+        """Decodes actionness.
+
+        Args:
+            x (dict): The event annotation.
+
+        Returns:
+            int: Integer label.
+        """
         if x == {}:
             return 0
         return 1
 
     def background_pass_shot_foul(self, x):
+        """Decodes pass, shots and foul.
+
+        Args:
+            x (dict): The event annotation.
+
+        Returns:
+            int: Integer label.
+        """
         if x["Pass"] == "O" and x["Wurf"] == "0":
             return 3
         return self.background_pass_shot(x)
 
     def background_pass_shot(self, x):
+        """Decodes passes and shots.
+
+        Args:
+            x (dict): The event annotation.
+
+        Returns:
+            int: Integer label.
+        """
         if x == {}:
             return 0
         if not x["Pass"] in ("O", "X"):
-            pass_labels = {
-                "A": 1,
-                "B": 1,
-                "C": 1,
-                "D": 1,
-                "E": 1
-            }
+            pass_labels = {"A": 1, "B": 1, "C": 1, "D": 1, "E": 1}
             return pass_labels[x["Pass"]]
         elif not x["Wurf"] == "0":
-            shot_labels = {
-                "1": 2,
-                "2": 2,
-                "3": 2,
-                "4": 2,
-                "5": 2,
-                "6": 2,
-                "7": 2,
-                "8": 2
-            }
+            shot_labels = {"1": 2, "2": 2, "3": 2, "4": 2, "5": 2, "6": 2, "7": 2, "8": 2}
             return shot_labels[x["Wurf"]]
         return 0
-
 
 
 if "__main__" == __name__:
