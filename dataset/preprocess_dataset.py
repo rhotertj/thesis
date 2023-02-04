@@ -8,6 +8,7 @@ This script is intended to synchronize position and video data and their respect
 """
 
 import sys
+
 sys.path.append("/nfs/data/mm4spa/mm_hbl/scripts/sync/")
 import shutil
 from pathlib import Path
@@ -25,23 +26,23 @@ DATA_SOURCE = Path("/nfs/data/mm4spa/mm_hbl/hbl_19-20")
 
 EVENTS_PATH = Path("/nfs/home/rhotertj/datasets/hbl/events")
 POSITIONS_PATH = Path("/nfs/home/rhotertj/datasets/hbl/positions")
-FRAMES_PATH = Path("/data/hbl_rawframes/frames_2997")
+FRAMES_PATH = Path("/data/hbl_rawframes/")
 VIDEO_PATH = Path("/nfs/home/rhotertj/datasets/hbl/videos")
 META_PATH = Path("/nfs/home/rhotertj/datasets/hbl/")
+
 
 def copy_and_rename_videos(meta_df):
     for event_id, row in meta_df.iterrows():
         src = DATA_SOURCE / "raw_video" / row["raw_video"]
-        target = VIDEO_PATH  / f"{event_id.replace('sr:sport_event:', '')}.mp4"
+        target = VIDEO_PATH / f"{event_id.replace('sr:sport_event:', '')}.mp4"
         shutil.copy(src, target)
+
 
 def read_all_matches_meta():
     # base mapping to video and position data
     index_col = "match_id"
     usecols = [index_col, "raw_pos_knx", "raw_video"]
-    df_matches = pd.read_csv(
-        DATA_SOURCE / "raw_mapping.csv", index_col=index_col, usecols=usecols
-    )
+    df_matches = pd.read_csv(DATA_SOURCE / "raw_mapping.csv", index_col=index_col, usecols=usecols)
 
     # offsets necessary for sync
     usecols = [index_col, "v_h1_start", "v_h1_end", "v_h2_start", "v_h2_end", "p_h1", "p_h2"]
@@ -55,21 +56,18 @@ def read_all_matches_meta():
     df = df.join(df_video)
     return df
 
+
 def read_sync_sportradar_data(fname, meta_info):
     with open(fname) as fr:
         # dict_keys(['generated_at', 'sport_event', 'sport_event_status', 'statistics', 'timeline'])
         json_events = json.load(fr)
     df_events = pd.DataFrame.from_records(json_events["timeline"]).sort_values("time")
 
-    df_events["localtime_ms"] = pd.to_datetime(df_events["time"], unit="ns").view(
-        np.int64
-    ) / int(1e6)
+    df_events["localtime_ms"] = pd.to_datetime(df_events["time"], unit="ns").view(np.int64) / int(1e6)
 
-    df_events = df_events.loc[
-        df_events["type"].isin(
-            ["period_start", "break_start", "match_started", "match_ended", "shot_blocked"]
-        )
-    ]
+    df_events = df_events.loc[df_events["type"].isin(
+        ["period_start", "break_start", "match_started", "match_ended", "shot_blocked"]
+    )]
     df_events = df_events[["type", "time", "localtime_ms"]]
     df_events["t_v"] = sync.localtime2video(
         t_w=pd.to_datetime(df_events["localtime_ms"], unit="ms"),
@@ -78,8 +76,9 @@ def read_sync_sportradar_data(fname, meta_info):
         v_h2_start=meta_info.v_h2_start,
         offset_p_h1=meta_info.p_h1,
         offset_p_h2=meta_info.p_h2,
-    ) # aligned video timestamp t_v in [s]
+    )  # aligned video timestamp t_v in [s]
     return df_events
+
 
 def resample(dxy: np.ndarray, resample_factor: float) -> np.ndarray:
     """Resample dim=0 and interpolate each element of dim=1 individually.
@@ -93,7 +92,7 @@ def resample(dxy: np.ndarray, resample_factor: float) -> np.ndarray:
     """
     t_r = int(dxy.shape[0] * resample_factor)  # new target time dimension
 
-    if dxy.ndim == 2: # ball positions, no player dimension
+    if dxy.ndim == 2:  # ball positions, no player dimension
         dxy = np.expand_dims(dxy, 1)
 
     def _resample(x: np.ndarray):
@@ -109,6 +108,7 @@ def resample(dxy: np.ndarray, resample_factor: float) -> np.ndarray:
         for dim in range(dxy.shape[-1]):
             drxy[:, player, dim] = _resample(dxy[:, player, dim])
     return drxy
+
 
 def align_position_to_video(pos_sets, meta_info):
     # Resample pos to video frame rate by interpolation
@@ -129,11 +129,11 @@ def align_position_to_video(pos_sets, meta_info):
             offset_p_h2=int(round(meta_info.p_h2 * meta_info.avg_frame_rate)),
             constant_values=0.0,
             replace_nan=0.0,
-        )
-        for pos in pos_sets
+        ) for pos in pos_sets
     ]
     # print(f"After alignment with video num_frames_video={int(round(meta_info.duration * meta_info.avg_frame_rate))}:", [x.shape for x in pos_sets])
     return pos_sets
+
 
 def main():
 
@@ -155,12 +155,13 @@ def main():
         meta_info = sync.SyncInformation(
             **{
                 **meta_df.iloc[match_number].to_dict(),
-                "match_id_min": meta_df.index[match_number].replace("sr:sport_event:", ""),
+                "match_id_min":
+                    meta_df.index[match_number].replace("sr:sport_event:", ""),
             },
             avg_frame_rate_pos=None,
             t_null=None,
         )
-        
+
         # Read position data (frame rate != video frame rate) and resample positions to video frame rate
         # Then, align position data such that each frame matches one position
         # print("Reading info for", meta_info.match_id_min)
@@ -174,7 +175,7 @@ def main():
         # print(f"{meta_info.avg_frame_rate_pos=}fps", [x.shape for x in pos_sets])
 
         pos_sets = align_position_to_video(pos_sets, meta_info)
-        
+
         pos_available = sync.pos_available(pos_sets[0], pos_sets[1], value_check="zeros")
         pos_sets.append(pos_available)
 
@@ -194,9 +195,9 @@ def main():
             stage = "val"
         elif match_number in test:
             stage = "test"
-        
+
         new_meta_df.loc[meta_df.index[match_number], "stage"] = stage
-        
+
         event_file = match_id2event_json[f"sr:sport_event:{meta_info.match_id_min}"]
         # print("Read", DATA_SOURCE / "events_its" / event_file)
         events_df = pd.read_json(DATA_SOURCE / "events_its" / event_file, lines=True)
@@ -212,9 +213,9 @@ def main():
 
         new_meta_df.loc[meta_df.index[match_number], "frames_path"] = FRAMES_PATH / f"{meta_info.match_id_min}.mp4.d"
 
-    new_meta_df.to_csv(META_PATH  / "meta3d.csv")
-    print(new_meta_df)           
+    new_meta_df.to_csv(META_PATH / "meta3d.csv")
+    print(new_meta_df)
 
 
-if __name__== "__main__":
+if __name__ == "__main__":
     main()
