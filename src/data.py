@@ -372,6 +372,78 @@ def mirror_positions(positions, horizontal=True, vertical=False, court_width=40,
     return positions
 
 
+class LabelDecoder:
+
+    def __init__(self, num_classes) -> None:
+        self.num_classes = num_classes
+        self.class_names = self.get_classnames()
+        self.decode_event = self.choose_label_mapping()
+
+    def __call__(self, x):
+        return self.decode_event(x)
+
+    def get_classnames(self):
+        if self.num_classes == 2:
+            return ["Background", "Action"]
+
+        cls_names = [
+            "Background",
+            "Pass",
+            "Shot",
+            "Foul"
+        ]
+        return cls_names[:self.num_classes]
+
+    def choose_label_mapping(self):
+        match self.num_classes:
+            
+            case 2:
+                return self.has_action
+            case 3:
+                return self.background_pass_shot
+            case 4:
+                return self.background_pass_shot_foul
+            case _:
+                raise ValueError(f"Number of classes ({self.num_classes}) is invalid!")
+
+    def has_action(self, x):
+        if x == {}:
+            return 0
+        return 1
+
+    def background_pass_shot_foul(self, x):
+        if x["Pass"] == "O" and x["Wurf"] == "0":
+            return 3
+        return self.background_pass_shot(x)
+
+    def background_pass_shot(self, x):
+        if x == {}:
+            return 0
+        if not x["Pass"] in ("O", "X"):
+            pass_labels = {
+                "A": 1,
+                "B": 1,
+                "C": 1,
+                "D": 1,
+                "E": 1
+            }
+            return pass_labels[x["Pass"]]
+        elif not x["Wurf"] == "0":
+            shot_labels = {
+                "1": 2,
+                "2": 2,
+                "3": 2,
+                "4": 2,
+                "5": 2,
+                "6": 2,
+                "7": 2,
+                "8": 2
+            }
+            return shot_labels[x["Wurf"]]
+        return 0
+
+
+
 if "__main__" == __name__:
     data = MultiModalHblDataset(
         "/nfs/home/rhotertj/datasets/hbl/meta3d.csv", seq_len=16, sampling_rate=4, load_frames=True

@@ -7,6 +7,7 @@ import numpy as np
 
 from lit_models import LitMViT
 from lit_data import LitHandballSynced
+from data import LabelDecoder
 from omegaconf import OmegaConf as omcon
 import argparse
 
@@ -20,12 +21,16 @@ def main(conf):
 
     conf.model.max_epochs = conf.trainer.max_epochs
 
+    label_decoder = LabelDecoder(conf.num_classes)
+
     model = LitMViT(
-        **conf.model
+        **conf.model,
+        label_mapping=label_decoder
     )
 
     lit_data = LitHandballSynced(
-        **conf.data
+        **conf.data,
+        label_mapping=label_decoder
     )
     lit_data.setup(conf.stage)
 

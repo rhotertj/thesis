@@ -74,36 +74,3 @@ def array2gif(arr: np.ndarray, out_path: str, fps: int):
     first_frame.save(out_path, format="GIF", append_images=frames, save_all=True,
                      duration=duration, loop=0, interlace=False, includ_color_table=True)
 
-
-def has_action(x):
-    if x == {}:
-        return 0
-    return 1
-
-
-def shot_pass_background(x):
-    if x == {}:  # background
-        return 0
-    if not x["Pass"] in ("O", "X"):
-        pass_labels = {
-            "A": 1,
-            "B": 1,
-            "C": 1,
-            "D": 1,
-            "E": 1
-        }
-        return pass_labels[x["Pass"]]
-    # wurf
-    elif not x["Wurf"] == "0":
-        shot_labels = {
-            "1": 2,
-            "2": 2,
-            "3": 2,
-            "4": 2,
-            "5": 2,
-            "6": 2,
-            "7": 2,
-            "8": 2
-        }
-        return shot_labels[x["Wurf"]]
-    return 0

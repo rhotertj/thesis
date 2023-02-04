@@ -2,9 +2,8 @@ from torch.utils.data import DataLoader, random_split
 import pytorch_lightning as pl
 from torchvision import transforms as t
 from video_transforms import FrameSequenceToTensor, NormalizeVideo
-from utils import has_action, shot_pass_background
 
-from data import MultiModalHblDataset
+from data import MultiModalHblDataset, LabelDecoder
 
 class LitHandballSynced(pl.LightningDataModule):
 
@@ -13,10 +12,10 @@ class LitHandballSynced(pl.LightningDataModule):
         meta_path_train : str,
         meta_path_val : str,
         meta_path_test : str,
+        label_mapping : LabelDecoder,
         seq_len : int = 8,
         sampling_rate : int = 1,
         load_frames : bool = True,
-        label_mapping : callable = shot_pass_background,
         batch_size : int = 1
         ) -> None:
 
@@ -42,7 +41,6 @@ class LitHandballSynced(pl.LightningDataModule):
 
 
     def setup(self, stage : str):
-        print(stage)
         match stage:
 
             case "train":

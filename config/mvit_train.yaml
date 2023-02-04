@@ -8,7 +8,7 @@ trainer: # logger extra
   overfit_batches: false # change int of n batches to debug with n batches
   check_val_every_n_epoch: 1
   accumulate_grad_batches: 16
-  max_epochs: 5
+  max_epochs: 30
   max_steps: -1
   max_time: null
   limit_train_batches: null # set fraction of training data
@@ -23,7 +23,7 @@ data:
   meta_path_val: "/nfs/home/rhotertj/datasets/hbl/meta3d_val.csv"
   meta_path_test: "/nfs/home/rhotertj/datasets/hbl/meta3d_test.csv"
   seq_len: 16
-  sampling_rate: 4
+  sampling_rate: 2
   load_frames: true
   batch_size: 2
 model:
@@ -31,7 +31,7 @@ model:
   learning_rate: 0.01
   momentum: 0.9
   weight_decay: 1e-4
-  num_classes: 3
+num_classes: 4
 checkpoint: ""
 callbacks:
   checkpointing:

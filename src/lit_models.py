@@ -10,6 +10,7 @@ import PIL
 
 from utils import draw_trajectory, plot_confmat
 from video_models import make_kinetics_mvit
+from data import LabelDecoder
 
 
 class LitMViT(pl.LightningModule):
@@ -18,12 +19,13 @@ class LitMViT(pl.LightningModule):
         self,
         pretrained_path: str,
         learning_rate: float,
-        num_classes: int,
+        label_mapping: LabelDecoder,
         momentum: float,
         weight_decay: float,
         max_epochs: int
     ) -> None:
         super().__init__()
+        num_classes = label_mapping.num_classes
         self.model = make_kinetics_mvit(pretrained_path, num_classes)
 
         # if self.log is not None:
@@ -43,7 +45,7 @@ class LitMViT(pl.LightningModule):
         self.ground_truths = []
         self.predictions = []
         self.confidences = []
-        self.class_names = ["Background", "Pass", "Shot"]
+        self.class_names = label_mapping.class_names
 
     def forward(self, input):
         x = input["frames"]
