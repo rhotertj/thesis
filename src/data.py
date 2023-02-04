@@ -447,6 +447,8 @@ class LabelDecoder:
         Returns:
             int: Integer label.
         """
+        if x == {}:
+            return 0
         if x["Pass"] == "O" and x["Wurf"] == "0":
             return 3
         return self.background_pass_shot(x)
