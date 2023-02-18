@@ -143,3 +143,4 @@ dataset/class2frame*
 dataset/means*
 dataset/std*
 models
+slurm*
