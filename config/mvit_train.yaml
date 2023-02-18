@@ -7,7 +7,7 @@ trainer: # logger extra
   devices: 1
   overfit_batches: false # change int of n batches to debug with n batches
   check_val_every_n_epoch: 1
-  accumulate_grad_batches: 16
+  accumulate_grad_batches: 2
   max_epochs: 30
   max_steps: -1
   max_time: null
@@ -25,7 +25,7 @@ data:
   seq_len: 16
   sampling_rate: 2
   load_frames: true
-  batch_size: 2
+  batch_size: 16
 model:
   pretrained_path: "models/mvit_b_16x4.pt"
   learning_rate: 0.01
