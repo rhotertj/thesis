@@ -12,6 +12,12 @@ from torchvision.transforms import Compose
 # TODO: Prepare different representation for positions
 # -> On the fly plotting might be too slow
 
+# TODO: We just need matchnumber and framenumber for an idx
+# Supply Dataset with jsonl mapping
+# If jsonl mapper is there, make dataset smaller
+# For idx, now dont get frame from availability and match boundary, but rather
+# from jsonl mapper which has a balanced class occurence.
+
 # TODO: Speed dataloading up by:
 #   - Putting team downsizing in pre-processing
 #   - Putting team indicator in pre-processing
@@ -54,9 +60,6 @@ class MultiModalHblDataset(Dataset):
         self.sampling_rate = sampling_rate
         self.transforms = transforms
         self.label_mapping = label_mapping
-
-        # might be useful to pass information from pytorch lightning config about dataset
-        self.meta = {}
 
         # print(f"Read {meta_path}...")
         self.meta_df = pd.read_csv(meta_path)
