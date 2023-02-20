@@ -15,10 +15,10 @@ def main(conf):
     pl.seed_everything(conf.seed_everything)
 
     logger = WandbLogger(
-        **conf.logger
+        **conf.logger,
+        config=conf
     )
-    
-
+    experiment_name = logger.experiment.name
     conf.model.max_epochs = conf.trainer.max_epochs
 
     label_decoder = LabelDecoder(conf.num_classes)
@@ -38,9 +38,9 @@ def main(conf):
 
     # create experiment directory
     exp_dir = Path(conf.callbacks.checkpointing.dir)
-    previous_experiments = [f for f in os.listdir(exp_dir) if os.path.isdir(exp_dir / f)]
-    next_dir = str(len(previous_experiments) + 1)
-    exp_dir = exp_dir / next_dir
+    # previous_experiments = [f for f in os.listdir(exp_dir) if os.path.isdir(exp_dir / f)]
+    # next_dir = str(len(previous_experiments) + 1)
+    exp_dir = exp_dir / experiment_name
     os.makedirs(exp_dir)
 
     if conf.save_config:
