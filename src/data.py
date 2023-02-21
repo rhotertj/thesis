@@ -8,6 +8,7 @@ import torch
 from collections import Counter
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose
+from tqdm import tqdm
 
 # TODO: Prepare different representation for positions
 # -> On the fly plotting might be too slow
@@ -28,7 +29,7 @@ class MultiModalHblDataset(Dataset):
     def __init__(
         self,
         meta_path: str,
-        seq_len: int = 8,
+        seq_len: int = 16,
         sampling_rate: int = 1,
         load_frames: bool = True,
         transforms: Union[None, Compose] = None,
@@ -44,7 +45,9 @@ class MultiModalHblDataset(Dataset):
 
         Args:
             meta_path (str): Path to the .csv file that holds paths to frames, annotations and positions.
-            seq_len (int, optional): An even desired number of frames. Defaults to 8.
+            idx_frame_mapping (str): Path to a .jsonl file that holds an alternative dataset size and reduced number of frames.
+                This allows for a stratified class frequency.
+            seq_len (int, optional): An even desired number of frames. Defaults to 16.
             sampling_rate (int, optional): Sample every nth frame. When set to 1, we sample subsequent frames
                 corresponding to seq_len. Defaults to 1.
             load_frames (bool, optional): Whether to read and process images. Defaults to True.
@@ -238,6 +241,19 @@ class MultiModalHblDataset(Dataset):
             "match_number": match_number
         }
         return instance
+
+    def get_class_proportions(self):
+        if not isinstance(self.__getitem__(0)["label"], int):
+            raise TypeError("Expected Integer label. To use this function, please pass a label_mapping")
+        print("Getting class proportions")
+        old_setting = self.load_frames
+        self.load_frames = False
+        labels = Counter()
+        for i in tqdm(range(len(self)), total = len(self)):
+            l = self.__getitem__(i)["label"]
+            labels[l] += 1
+        self.load_frames = old_setting
+        return labels
 
     def export_json(self, idx):
         """Generate trajectory in json format for internal visualization tool.
@@ -478,29 +494,18 @@ class LabelDecoder:
 
 if "__main__" == __name__:
     data = MultiModalHblDataset(
-        "/nfs/home/rhotertj/datasets/hbl/meta3d.csv", seq_len=16, sampling_rate=4, load_frames=True
+        "/nfs/home/rhotertj/datasets/hbl/meta3d_train.csv",
+        idx_frame_mapping="/nfs/home/rhotertj/datasets/hbl/meta3d_train_16_2.jsonl",
+        seq_len=16,
+        sampling_rate=2,
+        load_frames=True,
     )
     from utils import array2gif, draw_trajectory
-    idx = 7560
-    # 18413 is bg should be shot,
-    # 18388 is shot, same a 18413#
-    # 8998 is preparing for running towards center nothing special (no annot)
-    # 13797 paused game after foul (no annotation)
-    # 7560 annotated pass but not recognizable
-
+    idx = 186319
     instance = data[idx]
-    # instance = data.__getitem__(idx, frame_idx=16029, match_number=4)
-    # data.export_json(idx)
-    # exit(0)
+ 
     print("All good")
-    # breaks at 745124
-    # from tqdm import tqdm
-    # for i in tqdm(range(len(data))):
-    #     try:
-    #         data[i]
-    #     except:
-    #         print(i)
-    #         raise IndexError
+
     frames = instance["frames"]
     positions = instance["positions"]
     label = instance["label"]

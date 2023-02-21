@@ -8,10 +8,10 @@ trainer: # logger extra
   overfit_batches: false # change int of n batches to debug with n batches
   check_val_every_n_epoch: 1
   accumulate_grad_batches: 2
-  max_epochs: 30
+  max_epochs: 50
   max_steps: -1
   max_time: null
-  limit_train_batches: null # set fraction of training data
+  limit_train_batches: 0.5 # set fraction of training data
   limit_val_batches: null
   limit_test_batches: null
   log_every_n_steps: 50
@@ -28,11 +28,11 @@ data:
   batch_size: 16
 model:
   pretrained_path: "models/mvit_b_16x4.pt"
-  learning_rate: 0.01
+  learning_rate: 0.03
   momentum: 0.9
   weight_decay: 1e-4
-num_classes: 4
-checkpoint: ""
+num_classes: 3
+checkpoint: null
 callbacks:
   checkpointing:
     every_n: 1
