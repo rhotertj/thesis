@@ -10,7 +10,7 @@ import PIL
 
 from utils import draw_trajectory, plot_confmat
 from video_models import make_kinetics_mvit
-from data import LabelDecoder
+from data.labels import LabelDecoder
 
 
 class LitMViT(pl.LightningModule):

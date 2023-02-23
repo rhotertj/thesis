@@ -4,12 +4,15 @@ from pytorch_lightning.loggers import WandbLogger
 import os
 from pathlib import Path
 import numpy as np
-
-from lit_models import LitMViT
-from lit_data import LitHandballSynced
-from data import LabelDecoder
+import pandas as pd
 from omegaconf import OmegaConf as omcon
 import argparse
+
+from lit_models import LitMViT
+from lit_data import LitMultiModalHblDataset, LitResampledHblDataset
+from data.labels import LabelDecoder
+from utils import get_proportions_df
+
 
 def main(conf):
     pl.seed_everything(conf.seed_everything)
@@ -28,12 +31,17 @@ def main(conf):
         label_mapping=label_decoder
     )
 
-    lit_data = LitHandballSynced(
+    lit_data = eval(conf.dataset)(
         **conf.data,
         label_mapping=label_decoder
     )
     lit_data.setup(conf.stage)
 
+    train_df = get_proportions_df(lit_data.data_train, label_decoder, conf.num_classes)
+    val_df = get_proportions_df(lit_data.data_val, label_decoder, conf.num_classes)
+    logger.log_table("train/classes", data=train_df)
+    logger.log_table("val/classes", data=val_df)
+    
     callbacks = []
 
     # create experiment directory

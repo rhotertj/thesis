@@ -1,7 +1,34 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
+import pandas as pd
 import numpy as np
 from PIL import Image
+import torch.utils.data
+from data.labels import LabelDecoder
+
+
+def get_proportions_df(
+    dataset: torch.utils.data.Dataset,
+    label_decoder: LabelDecoder,
+    num_classes: int,
+) -> pd.DataFrame:
+    """Return a loggable `pd.DataFrame` that contains class proportions of the given Dataset.
+
+    Args:
+        dataset (torch.utils.data.Dataset): Dataset.
+        label_decoder (LabelDecoder): Label decoder that maps class integers to names.
+        num_classes (int): Number of classes.
+
+    Returns:
+        pd.DataFrame: The proportions DataFrame
+    """    
+    cnt = dataset.get_class_proportions()
+
+    proportions = []
+    for cls, n in cnt.most_common(num_classes):
+        proportions.append({"name": label_decoder.class_names[cls], "n": n, "proportion": n / len(dataset)})
+
+    return pd.DataFrame(proportions)
 
 
 def plot_confmat(confmat):
@@ -38,8 +65,7 @@ def draw_trajectory(positions: np.ndarray):
         x_t = positions[t, :, 0]
         team_indicator = positions[t, :, 2]  # team indicator, used for colors
 
-        sns.scatterplot(y=y_t, x=x_t, hue=team_indicator,
-                        legend=False, palette="Set1", alpha=a)
+        sns.scatterplot(y=y_t, x=x_t, hue=team_indicator, legend=False, palette="Set1", alpha=a)
 
     return fig
 
@@ -71,6 +97,13 @@ def array2gif(arr: np.ndarray, out_path: str, fps: int):
     frames = [Image.fromarray(fr, mode="RGB") for fr in frames_arr]
     first_frame = frames[0]
     # looped forever (0) (1 is loop once etc)
-    first_frame.save(out_path, format="GIF", append_images=frames, save_all=True,
-                     duration=duration, loop=0, interlace=False, includ_color_table=True)
-
+    first_frame.save(
+        out_path,
+        format="GIF",
+        append_images=frames,
+        save_all=True,
+        duration=duration,
+        loop=0,
+        interlace=False,
+        includ_color_table=True
+    )
