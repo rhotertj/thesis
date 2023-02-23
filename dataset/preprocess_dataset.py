@@ -214,6 +214,8 @@ def main():
         new_meta_df.loc[meta_df.index[match_number], "frames_path"] = FRAMES_PATH / f"{meta_info.match_id_min}.mp4.d"
 
     new_meta_df.to_csv(META_PATH / "meta3d.csv")
+    for stage in ["train", "val", "test"]:
+        new_meta_df[new_meta_df.stage == stage].to_csv(META_PATH / f"meta3d_{stage}.csv")
     print(new_meta_df)
 
 
