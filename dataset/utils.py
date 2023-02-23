@@ -6,19 +6,6 @@ import pandas as pd
 import numpy as np
 
 
-def plot_event_proportions(occurences_path : str, dataset_size : int) -> plt.Figure:
-    """Plots coarse and finegrained types of events.
-    Does not take body movement or outcome into account.
-
-    Args:
-        occurences_csv (str): A csv-formatted `pd.DataFrame` that holds classes and occurences.
-
-    Returns:
-        plt.Figure: Pie chart.
-    """
-
-    pass
-
 def generate_class_description_fine(row):
     pass_technique = {
         "O":  None,
@@ -68,7 +55,7 @@ def generate_class_description_coarse(fine_class):
         3: "Sprungwurf Torraum/Zentrum",
         4: "Standwurf mit Anlauf",
         5: "Standwurf ohne Anlauf",
-        6: "Dehwurf",
+        6: "Drehwurf",
         7: "7-Meter",
         8: "Undefinierter Wurf", 
     }
