@@ -18,16 +18,16 @@ trainer: # logger extra
   accelerator: "gpu"
   precision: 32
   num_sanity_val_steps: 1
-dataset: LitMultiModalHblDataset
+dataset: LitResampledHblDataset
 data:
-  meta_path_train: "/nfs/home/rhotertj/datasets/hbl/meta3d_train.csv"
-  meta_path_val: "/nfs/home/rhotertj/datasets/hbl/meta3d_val.csv"
-  meta_path_test: "/nfs/home/rhotertj/datasets/hbl/meta3d_test.csv"
+  meta_path: "/nfs/home/rhotertj/datasets/hbl/meta3d.csv"
+  idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/meta3d_16_2_nooverlap_train_balanced.jsonl"
+  idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/meta3d_16_2_nooverlap_val_balanced.jsonl"
+  idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/meta3d_16_2_nooverlap_val_balanced.jsonl"
   seq_len: 16
   sampling_rate: 2
   load_frames: true
   batch_size: 16
-  overlap: False
 model:
   pretrained_path: "models/mvit_b_16x4.pt"
   learning_rate: 0.03
