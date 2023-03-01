@@ -1,9 +1,13 @@
 name: thesis
 channels:
   - conda-forge
+  - pytorch
+  - nvidia
+  - dglteam/label/cu117
 dependencies:
   - python=3.10
   - pip
+  - imageio
   - numpy 
   - pandas
   - tqdm
@@ -12,5 +16,9 @@ dependencies:
   - pillow
   - wandb
   - simplejson
+  - pytorch=1.13.0
+  - torchvision
+  - pytorch-cuda=11.7
+  - dgl
   - pip:
     - -r requirements.txt

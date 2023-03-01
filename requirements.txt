@@ -1,14 +1,15 @@
 opencv-python-headless
-pytorch_lightning[extra]
-imagio
+pytorch_lightning
 moviepy
 pytorchvideo
-torch 
 torchvideo
 fvcore
 av
 floodlight
-torch-geometric
-torch-sparse
-torch-scatter
 networkx
+OmegaConf
+# dgllife # for model zoo
+# rdkit
+
+# pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu117
+# pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv torch_geometric -f https://data.pyg.org/whl/torch-1.13.0+cu117.html
