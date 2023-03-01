@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 from torchvision.transforms import Compose
 from tqdm import tqdm
 
-from data_utils import (
+from data.data_utils import (
     get_index_offset,
     check_label_within_slice,
     combine_teams_with_indicator,

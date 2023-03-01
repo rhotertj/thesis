@@ -1,10 +1,12 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import pandas as pd
 import numpy as np
 from PIL import Image
 import torch.utils.data
 from data.labels import LabelDecoder
+import networkx as nx
 
 
 def get_proportions_df(
@@ -49,26 +51,27 @@ def draw_trajectory(positions: np.ndarray):
     Returns:
         plt.figure.Figure: The plot.
     """
-    T = positions.shape[0]
+    A = positions.shape[0]
+    T = (len(positions[1]) - 1) // 3
     # start new figure, toss the old one
     plt.close()
     fig = plt.figure()
     # plot config
     plt.xlim(0, 40)
     plt.ylim(0, 20)
+    print(A, T)
+    print(positions[0])
+    colors = ["red", "green", "blue"]
+    for agent in range(A):
+        for t in range(T):
+            a = t / T  # transparency
+            y_t = positions[agent, t*3+2] # offset x and team
+            x_t = positions[agent, t*3+1] # offset team
+            team_indicator = positions[agent, 0]  # team indicator, used for colors
 
-    positions[:, -1, 2] = 2  # give ball an extra team
-
-    for t in range(T):
-        a = t / T  # transparency
-        y_t = positions[t, :, 1]
-        x_t = positions[t, :, 0]
-        team_indicator = positions[t, :, 2]  # team indicator, used for colors
-
-        sns.scatterplot(y=y_t, x=x_t, hue=team_indicator, legend=False, palette="Set1", alpha=a)
+            sns.scatterplot(y=[y_t], x=[x_t], color=colors[int(team_indicator)], legend=False, alpha=a)
 
     return fig
-
 
 def array2gif(arr: np.ndarray, out_path: str, fps: int):
     """Turns a stack of frames into a gif.
@@ -107,3 +110,42 @@ def array2gif(arr: np.ndarray, out_path: str, fps: int):
         interlace=False,
         includ_color_table=True
     )
+
+
+def graph2gif(G : nx.Graph, positions : np.ndarray, out_path: str, fps: int):
+    """Turns a graph and its corresponding node positions into a gif.
+
+    Args:
+        G (nx.Graph): Graph to be plotted.
+        arr (np.ndarray): Stacked RGB frames of shape [1, C, T, H, W]
+        out_path (str): Destination path for the gif.
+        fps (int): Frames per second.
+    """
+    def node_color(p):
+        if p == 1:
+            return "green"
+        elif p == 0:
+            return "red"
+        return "blue"
+    
+    images = []
+    for t in range(16):
+        fig = plt.figure()
+        canvas = FigureCanvas(fig)
+        nx.draw(
+            G,
+            with_labels=True,
+            font_weight='bold',
+            pos=[positions[t, n, :2] for n in range(15)],
+            node_color=[node_color(positions[t, n, 2]) for n in range(15)],
+        )
+        
+        canvas.draw()
+        width, height = fig.get_size_inches() * fig.get_dpi()
+        width, height = int(width), int(height)
+        image = np.frombuffer(canvas.tostring_rgb(), dtype=np.uint8).reshape(height, width, 3)
+        images.append(image)
+        plt.clf()
+
+    images = np.stack(images)
+    return 0 

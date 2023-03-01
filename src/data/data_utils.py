@@ -123,9 +123,9 @@ def mirror_positions(
     """
     print(positions.shape)
     if vertical:
-        positions[:, 1::2] = court_height - positions[:, 1::2]
+        positions[:, 2::2] = court_height - positions[:, 2::2]
     if horizontal:
-        positions[:, ::2] = court_width - positions[:, ::2]
+        positions[:, 1::2] = court_width - positions[:, 1::2]
 
     return positions
 
