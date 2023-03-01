@@ -10,12 +10,13 @@ from torch.utils.data import Dataset
 from torchvision.transforms import Compose
 from tqdm import tqdm
 
-from data.data_utils import (
+from data_utils import (
     get_index_offset,
     check_label_within_slice,
     combine_teams_with_indicator,
     mirror_positions,
-    ensure_correct_team_size
+    ensure_correct_team_size,
+    combine_ball_with_indicator
 )
 
 # TODO: Prepare different representation for positions
@@ -206,13 +207,9 @@ class MultiModalHblDataset(Dataset):
         team_a_pos, team_b_pos = ensure_correct_team_size(team_a_pos, team_b_pos)
 
         teams_pos = combine_teams_with_indicator(team_a_pos, team_b_pos)
+        ball_pos = combine_ball_with_indicator(ball_pos)
 
-        # add z dim for ball if not given
-        if ball_pos.shape[2] == 2:
-            ball_z = np.zeros((ball_pos.shape[0], 1, 1))
-            ball_pos = np.concatenate([ball_pos, ball_z], axis=-1)
-
-        all_pos = np.hstack([teams_pos, ball_pos])
+        all_pos = np.vstack([teams_pos, ball_pos])
 
         all_pos = mirror_positions(
             all_pos,
@@ -230,7 +227,7 @@ class MultiModalHblDataset(Dataset):
             "frame_idx": frame_idx,
             "query_idx": idx,
             "window_indices": window_indices,
-            "match_number": match_number
+            "match_number": match_number,
         }
         return instance
 
@@ -291,7 +288,7 @@ class ResampledHblDataset(Dataset):
             label_mapping (callable optional): A function that maps the label dictionary to an integer. 
                 Defaults to the identity function.
         """
-        super(MultiModalHblDataset).__init__()
+        super().__init__()
 
         self.seq_len = (seq_len // 2) * 2
         self.seq_half = seq_len // 2
@@ -370,7 +367,8 @@ class ResampledHblDataset(Dataset):
             # Add half sequence length to index to avoid underflowing dataset idx < seq_len
             instance = self.idx_to_frame_number.iloc[idx]
             match_number, frame_idx = instance["match_number"], instance["frame_idx"]
-            frame_idx += (self.seq_half * self.sampling_rate)
+            # NOTE: jsonl file already has buffed frame idx
+            # frame_idx += (self.seq_half * self.sampling_rate)
 
         frame_base_path = Path(self.frame_paths[match_number])
         events = self.event_dfs[match_number]
@@ -477,17 +475,15 @@ class ResampledHblDataset(Dataset):
 if "__main__" == __name__:
     data = MultiModalHblDataset(
         "/nfs/home/rhotertj/datasets/hbl/meta3d_train.csv",
-        idx_frame_mapping="/nfs/home/rhotertj/datasets/hbl/meta3d_train_16_2.jsonl",
         seq_len=16,
         sampling_rate=2,
         load_frames=True,
     )
-    from utils import array2gif, draw_trajectory
     idx = 186319
     instance = data[idx]
  
     print("All good")
-
+    exit()
     frames = instance["frames"]
     positions = instance["positions"]
     label = instance["label"]

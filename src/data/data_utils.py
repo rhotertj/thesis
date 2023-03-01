@@ -1,9 +1,13 @@
 import numpy as np
+import torch
 from collections import Counter
+import dgl
+import networkx as nx
+import itertools
 
 
 def combine_teams_with_indicator(team_a: np.ndarray, team_b: np.ndarray) -> np.ndarray:
-    """Adds a third dimension to both teams that indicates the team membership of players.
+    """Adds a third dimension to both teams, flattens the teams along the temporal dimension and adds a bit that indicates the team membership of players.
     Returns a stacked array containing both teams.
 
     Args:
@@ -11,22 +15,42 @@ def combine_teams_with_indicator(team_a: np.ndarray, team_b: np.ndarray) -> np.n
         team_b (np.ndarray): Positions of the second team.
 
     Returns:
-        np.ndarray: Combined teams with team indicator dimension.
+        np.ndarray: Combined flattened teams with team indicator.
     """
     if team_a.shape[2] == 2:
         # add team indicator
-        team_a_indicator = np.zeros((*team_a.shape[:2], 1))
-        team_b_indicator = team_a_indicator + 1
-
-        team_a = np.concatenate([team_a, team_a_indicator], axis=-1)
-        team_b = np.concatenate([team_b, team_b_indicator], axis=-1)
-    else:
-        # switch dummy z position with team indicator
-        team_a[:, :, 2] = 0
-        team_b[:, :, 2] = 1
-
+        dummy_z = np.ones((*team_a.shape[:2], 1))
+        team_a = np.concatenate([team_a, dummy_z], axis=-1)
+        team_b = np.concatenate([team_b, dummy_z], axis=-1)
     teams_pos = np.hstack([team_a, team_b])
+    # team player location
+    teams_pos = np.einsum("tpl->ptl", teams_pos).reshape(14, -1)
+    team_a_indicator = np.zeros((7,1))
+    team_b_indicator = team_a_indicator + 1
+
+    indicator = np.vstack([team_a_indicator, team_b_indicator])
+    teams_pos = np.concatenate([indicator, teams_pos], axis=1)
     return teams_pos
+
+def combine_ball_with_indicator(ball_pos: np.ndarray) -> np.ndarray:
+    """Adds a third dimension to the ball, flattens it along the temporal dimension and adds a bit that indicates
+    that positions belong to the ball.
+
+    Args:
+        ball_pos (np.ndarray): Positions of the ball.
+
+    Returns:
+        np.ndarray: Flattened ball with indicator.
+    """
+    # add z dim for ball if not given
+    if ball_pos.shape[2] == 2:
+        ball_z = np.zeros((ball_pos.shape[0], 1, 1))
+        ball_pos = np.concatenate([ball_pos, ball_z], axis=-1)
+
+    ball_pos = ball_pos.reshape(1, -1)
+    indicator = np.array([[2]])
+    ball_pos = np.concatenate([indicator, ball_pos], axis=1)
+    return ball_pos
 
 
 def ensure_correct_team_size(team_a, team_b):
@@ -97,10 +121,11 @@ def mirror_positions(
         court_width (int, optional): Court width in meters. Defaults to 40.
         court_height (int, optional): Court height in meters. Defaults to 20.
     """
+    print(positions.shape)
     if vertical:
-        positions[:, :, 1] = court_height - positions[:, :, 1]
+        positions[:, 1::2] = court_height - positions[:, 1::2]
     if horizontal:
-        positions[:, :, 0] = court_width - positions[:, :, 0]
+        positions[:, ::2] = court_width - positions[:, ::2]
 
     return positions
 
@@ -146,3 +171,33 @@ def get_index_offset(boundaries, idx2frame, idx):
 
             return match_number, frame_idx
     raise IndexError(f"{idx} could not be found with boundaries {boundaries}.")
+
+
+def create_graph(positions : np.ndarray, epsilon : float):    
+    # create graph, fully connected
+    G = dgl.graph([])
+    G = dgl.add_nodes(G, 15)   
+
+    # create edges wrt eps nbhood at timestep 0
+    for x, y in itertools.combinations(range(15), r=2):
+        dist = torch.linalg.norm(positions[0, x, :2] - positions[0, y, :2])
+        if dist < epsilon:
+            G = dgl.add_edges(G, [x, y], [y, x])
+
+    # normalize positions h w
+    positions[:, :, 0] /= 40  # court length
+    positions[:, :, 1] /= 20  # court length
+
+    G.ndata["positions"] = torch.einsum("tnp->ntp",positions)
+    G = dgl.add_self_loop(G)
+    return G
+
+if __name__ == "__main__":
+    positions = torch.ones((16,15,3))
+
+    G = create_graph(positions, 7)
+    print(G.nodes(data=True))
+
+    dG = dgl.from_networkx(G, node_attrs=["positions"], idtype=torch.float32)
+
+    print(dG)
