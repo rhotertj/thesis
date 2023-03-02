@@ -1,3 +1,4 @@
+import torch
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
@@ -8,7 +9,7 @@ import pandas as pd
 from omegaconf import OmegaConf as omcon
 import argparse
 
-from lit_models import LitMViT
+from lit_models import LitMViT, LitGAT
 from lit_data import LitMultiModalHblDataset, LitResampledHblDataset
 from data.labels import LabelDecoder
 from utils import get_proportions_df
@@ -26,7 +27,7 @@ def main(conf):
 
     label_decoder = LabelDecoder(conf.num_classes)
 
-    model = LitMViT(
+    model = eval(conf.model_class)(
         **conf.model,
         label_mapping=label_decoder
     )
@@ -49,7 +50,7 @@ def main(conf):
     # previous_experiments = [f for f in os.listdir(exp_dir) if os.path.isdir(exp_dir / f)]
     # next_dir = str(len(previous_experiments) + 1)
     exp_dir = exp_dir / experiment_name
-    os.makedirs(exp_dir)
+    os.makedirs(exp_dir, exist_ok=True) # allow overwrite, useful for manually set expnames
 
     if conf.save_config:
         with open(exp_dir/"config.yaml", "w+") as f:

@@ -417,13 +417,9 @@ class ResampledHblDataset(Dataset):
         team_a_pos, team_b_pos = ensure_correct_team_size(team_a_pos, team_b_pos)
 
         teams_pos = combine_teams_with_indicator(team_a_pos, team_b_pos)
+        ball_pos = combine_ball_with_indicator(ball_pos)
 
-        # add z dim for ball if not given
-        if ball_pos.shape[2] == 2:
-            ball_z = np.zeros((ball_pos.shape[0], 1, 1))
-            ball_pos = np.concatenate([ball_pos, ball_z], axis=-1)
-
-        all_pos = np.hstack([teams_pos, ball_pos])
+        all_pos = np.vstack([teams_pos, ball_pos])
 
         all_pos = mirror_positions(
             all_pos,

@@ -8,6 +8,7 @@ av
 floodlight
 networkx
 OmegaConf
+notebook
 # dgllife # for model zoo
 # rdkit
 

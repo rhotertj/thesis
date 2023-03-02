@@ -1,7 +1,7 @@
-import math
-import torch.nn.functional as F
+import torch
 from torch import nn
-from typing import Callable, Tuple
+
+from typing import Callable
 
 
 def create_default_head(

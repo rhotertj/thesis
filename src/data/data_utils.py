@@ -121,7 +121,6 @@ def mirror_positions(
         court_width (int, optional): Court width in meters. Defaults to 40.
         court_height (int, optional): Court height in meters. Defaults to 20.
     """
-    print(positions.shape)
     if vertical:
         positions[:, 2::2] = court_height - positions[:, 2::2]
     if horizontal:
@@ -173,22 +172,22 @@ def get_index_offset(boundaries, idx2frame, idx):
     raise IndexError(f"{idx} could not be found with boundaries {boundaries}.")
 
 
-def create_graph(positions : np.ndarray, epsilon : float):    
+def create_graph(positions : torch.Tensor, epsilon : float):    
     # create graph, fully connected
-    G = dgl.graph([])
+    G = dgl.graph([]).to(positions.device)
     G = dgl.add_nodes(G, 15)   
 
     # create edges wrt eps nbhood at timestep 0
-    for x, y in itertools.combinations(range(15), r=2):
-        dist = torch.linalg.norm(positions[0, x, :2] - positions[0, y, :2])
+    for a1, a2 in itertools.combinations(range(15), r=2):
+        dist = torch.linalg.norm(positions[a1, 1:2] - positions[a2, 1:2])
         if dist < epsilon:
-            G = dgl.add_edges(G, [x, y], [y, x])
+            G = dgl.add_edges(G, [a1, a2], [a2, a1])
 
     # normalize positions h w
-    positions[:, :, 0] /= 40  # court length
-    positions[:, :, 1] /= 20  # court length
+    positions[:, 1::2] /= 40  # court length
+    positions[:, 2::2] /= 20  # court length
+    G.ndata["positions"] = positions
 
-    G.ndata["positions"] = torch.einsum("tnp->ntp",positions)
     G = dgl.add_self_loop(G)
     return G
 
