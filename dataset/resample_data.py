@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+import argparse
 
 from tqdm import tqdm
 import pandas as pd
@@ -70,8 +71,8 @@ def random_split_dataframe(df : pd.DataFrame, val_size : float = 0.15, test_size
     return train_idx, val_idx, test_idx
 
 
-def split_dataframe(df : pd.DataFrame, val_size : float = 0.15, test_size : float = 0.15):
-    """Random splits a `pd.DataFrame` into train, val and test split.
+def time_split_dataframe(df : pd.DataFrame, val_size : float = 0.15, test_size : float = 0.15):
+    """Splits a `pd.DataFrame` into train, val and test split.
 
     Args:
         df (pd.DataFrame): DataFrame to split.
@@ -83,14 +84,119 @@ def split_dataframe(df : pd.DataFrame, val_size : float = 0.15, test_size : floa
     """    
     train_size = 1 - test_size
     df_idx = df.index.tolist()
+    # shuffle=False ensures splitting along temporal axis
     train_idx, test_idx, *_ = train_test_split(df_idx, shuffle=False, test_size=test_size)
     train_idx, val_idx, *_ = train_test_split(train_idx, shuffle=False, test_size=val_size/train_size)
     return train_idx, val_idx, test_idx
 
+def load_split_matches_df(data_path : Path, sequence_length : int, sampling_rate : int, overlap : bool, balanced : bool):
+    
+    overlaps = [overlap]
+    if balanced:
+        overlaps = (True, False)
 
+    dfs  = []
+    for _overlap in overlaps:
+        trainset = MultiModalHblDataset(
+            meta_path=data_path / "meta3d_train.csv",
+            seq_len=sequence_length,
+            sampling_rate=sampling_rate, 
+            load_frames=False,
+            overlap=_overlap
+        )
+        valset = MultiModalHblDataset(
+            meta_path=data_path / "meta3d_val.csv",
+            seq_len=sequence_length,
+            sampling_rate=sampling_rate, 
+            load_frames=False,
+            overlap=_overlap
+        )
+        testset = MultiModalHblDataset(
+            meta_path=data_path / "meta3d_test.csv",
+            seq_len=sequence_length,
+            sampling_rate=sampling_rate, 
+            load_frames=False,
+            overlap=_overlap
+        )
+
+        train_df = create_dataframe_from_dataset(trainset)
+        val_df = create_dataframe_from_dataset(valset)
+        test_df = create_dataframe_from_dataset(testset)
+        dfs.append((train_df, val_df, test_df))
+
+    return dfs
+
+def balance_classes(overlap_df : pd.DataFrame, chunk_df : pd.DataFrame) -> pd.DataFrame:
+    # TODO Size of background class
+    overlapped_shots = overlap_df[overlap_df.class_coarse == "Shot"]
+    overlapped_passes = overlap_df[overlap_df.class_coarse == "Pass"].iloc[:len(overlapped_shots)]
+    simple_background = chunk_df[chunk_df.shot.isnull()]
+    full_df = pd.concat([overlapped_passes, simple_background, overlapped_shots])
+    full_df.sort_values(by=["frame_idx"], inplace=True)
+    full_df.reset_index(inplace=True, drop=True)
+    return balanced_df
 
 if "__main__" == __name__:
-    # TODO Go for argparse with defaults
+    parser = argparse.ArgumentParser(description='Resample the dataset!')
+    parser.add_argument("-d", "--data_path", type=str, help='Path for meta data.', default=Path("/nfs/home/rhotertj/datasets/hbl"))
+    parser.add_argument('-m', "--mode", type=str, help='Splitting criterion.', choices=['matches', 'random', 'time'])
+    parser.add_argument('-v', "--val_size", type=float, help="Split size of validation set.")
+    parser.add_argument('-t', "--test_size", type=float, help="Split size of test set.")
+    parser.add_argument('-b', "--balanced", type=bool, help="Whether upsampling of underrepresented classes takes place.")
+    parser.add_argument('-o', '--overlap', type=bool, help="Whether to use overlapping sliding windows. Ignored when --balanced is True.")
+    parser.add_argument('-l', '--sequence_length', type=int, help="Sequence length.")
+    parser.add_argument('-r', '--sampling_rate', type=int, help="Sampling rate.")
+
+    args = parser.parse_args() 
+
+    if args.mode == "random" and (args.overlap == True or args.balanced == True):
+        print("Please do not use random splits with overlapping sliding windows. This will lead to the same event landing in more than one split.")
+        exit(1)
+
+    if args.mode == 'matches':
+        split_match_dfs = load_split_matches_df(args.data_path, args.sequence_length, args.sampling_rate, args.overlap, args.balanced)
+        splits = {}
+        if args.balance:
+            overlapped_dfs, chunk_dfs = split_match_dfs
+            for split, overlap_df, chunk_df in zip(["train", "val", "test"], overlapped_dfs, chunk_dfs):
+                split_df = balance_classes(overlap_df, chunk_df)
+                splits[split] = split_df
+        
+        else:
+            for split, df in zip(["train", "val", "test"], split_match_dfs[0]):
+                splits[split] = df
+
+        # TODO Save splits :)
+    if args.mode in ('time', 'random'):
+        overlaps = [args.overlap]
+        if args.balanced:
+            overlaps = (True, False)
+
+        dfs  = []
+        for _overlap in overlaps:
+            dataset = MultiModalHblDataset(
+                meta_path=args.data_path / "meta3d.csv",
+                seq_len=args.sequence_length,
+                sampling_rate=args.sampling_rate, 
+                load_frames=False,
+                overlap=_overlap
+            )      
+
+        if args.balanced:
+            overlap_df, chunk_df = dfs
+            balanced_df = balance_classes(overlap_df, chunk_df)
+
+        if args.mode == "time":
+            train_idx, val_idx, test_idx = time_split_dataframe(dfs[0], args.val_size, args.test_size)
+
+        if args.mode == "random":
+            train_idx, val_idx, test_idx = random_split_dataframe(dfs[0], args.val_size, args.test_size)
+
+
+    # TODO
+    # makedirs datapath / resampled / balanced / _balanced_ / overlap / _overlap_ / mode / _mode_ / sql_sr / _sqlxsr_ / meta3d_split.jsonl
+    #------------------------------------
+
     data_path = Path("/nfs/home/rhotertj/datasets/hbl")
     sql = 16
     sr = 2
@@ -123,7 +229,7 @@ if "__main__" == __name__:
     full_df.reset_index(inplace=True, drop=True)
 
     # print(full_df.value_counts(["class_coarse"]))
-    train_idx, val_idx, test_idx = split_dataframe(full_df)
+    train_idx, val_idx, test_idx = time_split_dataframe(full_df)
 
     train_df = full_df.iloc[train_idx]
     train_df.reset_index(inplace=True, drop=True)
@@ -142,7 +248,6 @@ if "__main__" == __name__:
     test_df.to_json(data_path / f"meta3d_{sql}_{sr}_test_balanced.jsonl", lines=True, orient="records")
 
 
-    # TODO: Why is the distribution of classes different when iterating over the dataset than in the source dataframe / jsonl?
     from data.labels import LabelDecoder
     ld = LabelDecoder(3)
     dataset = ResampledHblDataset(
