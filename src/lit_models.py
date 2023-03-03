@@ -137,7 +137,11 @@ class LitGAT(pl.LightningModule):
     def __init__(
         self,
         epsilon : float,
-        dim_h : int,
+        dim_in: int,
+        dim_h: int,
+        heads : int,
+        input_embedding: bool,
+        readout: str,
         learning_rate: float,
         label_mapping: LabelDecoder,
         momentum: float,
@@ -147,8 +151,15 @@ class LitGAT(pl.LightningModule):
         super().__init__()
         num_classes = label_mapping.num_classes
         self.epsilon = epsilon
-        # input is 3dim * 16 timesteps, each node 1 player
-        self.model = GAT(49, dim_h, num_classes=num_classes)
+
+        self.model = GAT(
+            dim_h=dim_h,
+            dim_in=dim_in,
+            num_classes=num_classes,
+            readout=readout,
+            heads=heads,
+            input_embedding=input_embedding
+        )
 
         self.lr = learning_rate
         self.loss = torch.nn.CrossEntropyLoss()

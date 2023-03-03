@@ -8,22 +8,40 @@ import numpy as np
 from data.data_utils import create_graph
 from heads import create_default_head
 
+
 class GAT(torch.nn.Module):
 
-    def __init__(self, dim_in, dim_h, num_classes, heads=8):
+    def __init__(
+        self,
+        dim_in: int,
+        dim_h: int,
+        num_classes: int,
+        input_embedding: bool,
+        readout: str = "mean",
+        heads: int = 8,
+    ):
+        """A simple Graph Attention Model.
+
+        Args:
+            dim_in (int): Input dimension.
+            dim_h (int): Hidden dimension.
+            num_classes (int): Number of classes to classify.
+            input_embedding (bool): Whether to use a linear layer to project input before GAT layers.
+            readout (str, optional): Readout operation. Can be "sum", "min", "mean" and "max". Defaults to "mean".
+            heads (int, optional): Number of attention heads. Defaults to 8.
+        """    	
         super().__init__()
-        # add feature embedding layer first?
-        self.input_layer = torch.nn.Linear(dim_in, dim_h)
-        self.gat1 = GATv2Conv(dim_h, dim_h, num_heads=heads, feat_drop=0.4)
+        if input_embedding:
+            self.input_layer = torch.nn.Linear(dim_in, dim_h)
+            dim_in = dim_h
+        else:
+            self.input_layer = torch.nn.Identity()
+        self.gat1 = GATv2Conv(dim_in, dim_h, num_heads=heads, feat_drop=0.4)
         self.gat2 = GATv2Conv(dim_h, dim_h, num_heads=heads)
+        self.readout = readout
         self.relu = torch.nn.ReLU()
-        # TODO Configure readout and other params
-        # TODO Make mean a separate thing
-        self.head = create_default_head(
-            input_dim=dim_h,
-            output_dim=num_classes,
-            activation=self.relu,
-            dropout=0.3)
+
+        self.head = create_default_head(input_dim=dim_h, output_dim=num_classes, activation=self.relu, dropout=0.3)
 
     def forward(self, g, g_feats):
         # graph attention
@@ -36,11 +54,12 @@ class GAT(torch.nn.Module):
         h = torch.mean(h, dim=1)
         # readout function (handles batched graph)
         g.ndata["h"] = h
-        h = dgl.mean_nodes(g, "h")
+        h = dgl.readout_nodes(g, "h", op=self.readout)
         # classify graph representation
         h = self.head(h)
         h = h.softmax(-1)
-        return h   
+        return h
+
 
 if __name__ == "__main__":
     from data.datasets import MultiModalHblDataset
@@ -53,12 +72,14 @@ if __name__ == "__main__":
     )
 
     # TODO Add cls token to model and input
+    # Might be difficult with batched graph, maybe a custom readout func?
+    # might work with topk nodes
     # https://github.com/facebookresearch/mvit/blob/8ee201520936fad17ca474dadf4114d49945d732/mvit/models/mvit_model.py#L158
 
     example = ds[1350]
     positions = torch.tensor(example["positions"], dtype=torch.float32)
     epsilon = 7
-    
+
     g = create_graph(positions, epsilon)
 
     model = GAT(49, 64, 64)

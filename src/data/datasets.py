@@ -19,9 +19,6 @@ from data.data_utils import (
     combine_ball_with_indicator
 )
 
-# TODO: Prepare different representation for positions
-# -> On the fly plotting might be too slow
-
 class MultiModalHblDataset(Dataset):
 
     def __init__(
