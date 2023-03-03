@@ -20,5 +20,6 @@ dependencies:
   - torchvision
   - pytorch-cuda=11.7
   - dgl
+  - yapf
   - pip:
     - -r requirements.txt
