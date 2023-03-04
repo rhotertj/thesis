@@ -1,4 +1,5 @@
 from torch.utils.data import DataLoader, random_split
+from pathlib import Path
 import pytorch_lightning as pl
 from torchvision import transforms as t
 from video_transforms import FrameSequenceToTensor, NormalizeVideo
@@ -150,7 +151,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
             case "train":
 
                 self.data_train = ResampledHblDataset(
-                    meta_path=self.meta_path,
+                    meta_path=Path(self.meta_path) / "meta3d_train.csv",
                     idx_to_frame=self.idx_mapping_train,
                     label_mapping=self.label_mapping,
                     load_frames=self.load_frames,
@@ -159,7 +160,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
                     transforms=self.transforms
                 )
                 self.data_val = ResampledHblDataset(
-                    meta_path=self.meta_path,
+                    meta_path=Path(self.meta_path) / "meta3d_val.csv",
                     idx_to_frame=self.idx_mapping_val,
                     label_mapping=self.label_mapping,
                     load_frames=self.load_frames,
@@ -171,7 +172,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
             case "validate":
 
                 self.data_val = ResampledHblDataset(
-                    meta_path=self.meta_path,
+                    meta_path=Path(self.meta_path) / "meta3d_val.csv",
                     idx_to_frame=self.idx_mapping_val,
                     label_mapping=self.label_mapping,
                     load_frames=self.load_frames,
@@ -182,7 +183,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
             case "test":
 
                 self.data_test = ResampledHblDataset(
-                    meta_path=self.meta_path,
+                    meta_path=Path(self.meta_path) / "meta3d_test.csv",
                     idx_to_frame=self.idx_mapping_test,
                     label_mapping=self.label_mapping,
                     load_frames=self.load_frames,
