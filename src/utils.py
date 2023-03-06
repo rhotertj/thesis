@@ -59,8 +59,7 @@ def draw_trajectory(positions: np.ndarray):
     # plot config
     plt.xlim(0, 40)
     plt.ylim(0, 20)
-    print(A, T)
-    print(positions[0])
+
     colors = ["red", "green", "blue"]
     for agent in range(A):
         for t in range(T):

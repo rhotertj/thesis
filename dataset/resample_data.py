@@ -147,8 +147,8 @@ if "__main__" == __name__:
         "-d", "--data_path", type=str, help='Path for meta data.', default=Path("/nfs/home/rhotertj/datasets/hbl")
     )
     parser.add_argument('-m', "--mode", type=str, help='Splitting criterion.', choices=['matches', 'random', 'time'])
-    parser.add_argument('-v', "--val_size", type=float, help="Split size of validation set.")
-    parser.add_argument('-t', "--test_size", type=float, help="Split size of test set.")
+    parser.add_argument('-v', "--val_size", type=float, help="Split size of validation set.", default=0.15)
+    parser.add_argument('-t', "--test_size", type=float, help="Split size of test set.", default=0.15)
     parser.add_argument(
         '-b', "--balanced", type=bool, help="Whether upsampling of underrepresented classes takes place.", default=False
     )
@@ -213,6 +213,8 @@ if "__main__" == __name__:
                 load_frames=False,
                 overlap=_overlap
             )
+            df = create_dataframe_from_dataset(dataset)
+            dfs.append(df)
 
         if args.balanced:
             overlap_df, chunk_df = dfs

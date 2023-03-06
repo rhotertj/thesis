@@ -55,8 +55,8 @@ class LitMViT(pl.LightningModule):
         loss = self.loss(y, targets, offsets)
         self.log("train/batch_loss", loss.mean())
 
-        batch_acc = self.train_accuracy.update(y, targets)
-        self.log("train/batch_acc", torch.mean(batch_acc))
+        self.train_accuracy.update(y, targets)
+        self.log("train/batch_acc", torch.mean((targets == y.argmax(-1)).to(torch.float32)))
         return loss
 
     def training_epoch_end(self, outputs):
@@ -186,13 +186,8 @@ class LitGAT(pl.LightningModule):
         self.class_names = label_mapping.class_names
 
     def forward(self, input):
-        positions = input["positions"].to(torch.float32)
-        graphs = []
-        for b in range(positions.shape[0]):
-            g = create_graph(positions[b], 7)
-            graphs.append(g)
-        graph_batch = dgl.batch(graphs)
-        res = self.model(graph_batch, graph_batch.ndata["positions"])
+        positions = input["positions"]
+        res = self.model(positions, positions.ndata["positions"])
         return res
 
     def training_step(self, batch, batch_idx):
@@ -202,14 +197,14 @@ class LitGAT(pl.LightningModule):
         loss = self.loss(y, targets, offsets)
         self.log("train/batch_loss", loss.mean())
 
-        batch_acc = self.train_accuracy.update(y, targets)
-        self.log("train/batch_acc", torch.mean(batch_acc))
+        self.train_accuracy.update(y, targets)
+        self.log("train/batch_acc", torch.mean((targets == y.argmax(-1)).to(torch.float32)))
         return loss
 
     def training_epoch_end(self, outputs):
         self.log("train/epoch_loss", np.mean([item["loss"].item() for item in outputs]))
         acc_per_class = self.train_accuracy.compute()
-        wandb.log("train/acc", torch.mean(acc_per_class))
+        self.log("train/acc", torch.mean(acc_per_class))
         
         acc_dict = {n : acc_per_class[i] for i, n in enumerate(self.class_names)}
         self.log("train/acc_classes", acc_dict)
@@ -231,7 +226,7 @@ class LitGAT(pl.LightningModule):
         ground_truths = []
         predictions = []
         confidences = []
-        for b in range(batch["positions"].shape[0]):
+        for b in range(len(targets)):
             predictions.append(soft_y[b].argmax().item())
             confidences.append(soft_y[b])
             ground_truths.append(targets[b].detach().cpu().item())
@@ -290,7 +285,17 @@ class LitGAT(pl.LightningModule):
         )
         return [optimizer], [scheduler]
 
-def unweighted_cross_entropy(batch_y : torch.Tensor, batch_gt : torch.Tensor, batch_label_offsets : torch.Tensor):
+def unweighted_cross_entropy(batch_y : torch.Tensor, batch_gt : torch.Tensor, batch_label_offsets : torch.Tensor = None):
+    """Computes the cross entropy loss across a batch.
+
+    Args:
+        batch_y (torch.Tensor): Predictions.
+        batch_gt (torch.Tensor): Targets.
+        batch_label_offsets (torch.Tensor): Label offsets.
+
+    Returns:
+        torch.Tensor: Loss.
+    """    
     return torch.nn.functional.cross_entropy(batch_y, batch_gt)
 
 def weighted_cross_entropy(batch_y : torch.Tensor, batch_gt : torch.Tensor, batch_label_offsets : torch.Tensor):

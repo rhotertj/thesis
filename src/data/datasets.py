@@ -381,13 +381,13 @@ class ResampledHblDataset(Dataset):
             window_indices.append(window_idx)
             if window_idx in events.index:
                 label = events.loc[window_idx].labels
-                label_offset = ((window_idx - frame_idx) + half_range) // self.sampling_rate
+                label_offset = (window_idx - frame_idx) // self.sampling_rate
             # Check whether we missed an annotation because of a higher sampling rate
             else:
                 label_idx = check_label_within_slice(window_idx, events.index, self.sampling_rate)
                 if label_idx:
                     label = events.loc[label_idx].labels
-                    label_offset = ((window_idx - frame_idx) + half_range) // self.sampling_rate
+                    label_offset = (window_idx - frame_idx) // self.sampling_rate
 
             if self.load_frames:
                 frame_path = str(frame_base_path / f"{str(window_idx).rjust(6, '0')}.jpg")
@@ -448,6 +448,8 @@ class ResampledHblDataset(Dataset):
             l = self.__getitem__(i)["label"]
             labels[l] += 1
         self.load_frames = old_setting
+        print("Labels", labels)
+        print("VC:", self.idx_to_frame_number.value_counts(["class_coarse"]))
         return labels
 
     def export_json(self, idx):

@@ -2,10 +2,14 @@ from torch.utils.data import DataLoader, random_split
 from pathlib import Path
 import pytorch_lightning as pl
 from torchvision import transforms as t
+import torch
+import numpy as np
+import dgl
 from video_transforms import FrameSequenceToTensor, NormalizeVideo
 
 from data.datasets import MultiModalHblDataset, ResampledHblDataset
 from data.labels import LabelDecoder
+from data.data_utils import create_graph
 
 class LitMultiModalHblDataset(pl.LightningDataModule):
 
@@ -193,10 +197,10 @@ class LitResampledHblDataset(pl.LightningDataModule):
                 )
 
     def train_dataloader(self):
-        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4,persistent_workers=True, pin_memory=True, shuffle=True)
+        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4,persistent_workers=True, pin_memory=True, shuffle=True, collate_fn=multimodal_collate)
 
     def val_dataloader(self):
-        return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, persistent_workers=True)
+        return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, persistent_workers=True, collate_fn=multimodal_collate)
 
     def test_dataloader(self):
         return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4)
@@ -207,3 +211,35 @@ class LitResampledHblDataset(pl.LightningDataModule):
     def teardown(self, stage: str) -> None:
         # Nothing to do here (yet)
         pass
+
+
+def multimodal_collate(instances):
+    """Collate function that batches both position data and video data.
+
+    Args:
+        instances (list): List of instances to be batched.
+
+    Returns:
+        dict: Batched instances.
+    """    
+    batch = {}
+    for k in instances[0].keys():
+        first_entry = instances[0][k]
+        if isinstance(first_entry, list): # might be empty (no frames), windows_indices
+            batch[k] = torch.stack([torch.Tensor(instance[k]) for instance in instances])
+            # if all empty, pass empty tensor
+            pass
+        elif isinstance(first_entry, torch.Tensor):
+            batch[k] = torch.stack([instance[k] for instance in instances])
+        elif isinstance(first_entry, np.ndarray): # frames, positions
+            if k == "positions":
+                graphs = [create_graph(torch.Tensor(instance[k]), 7) for instance in instances]
+                batch[k] = dgl.batch(graphs)
+            else:
+                batch[k] = torch.stack([torch.tensor(instance[k]) for instance in instances])
+            
+        elif isinstance(first_entry, (int, float, np.int64, np.float64)): # frame_idx, query_idx, label_offset, label, match_number
+            # create a simple list comprehension and then create tensor
+            batch[k] = torch.tensor([instance[k] for instance in instances])
+
+    return batch
