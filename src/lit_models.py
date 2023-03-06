@@ -24,29 +24,22 @@ class LitMViT(pl.LightningModule):
         label_mapping: LabelDecoder,
         momentum: float,
         weight_decay: float,
-        max_epochs: int
+        max_epochs: int,
+        loss_func : callable
     ) -> None:
         super().__init__()
         num_classes = label_mapping.num_classes
         self.model = make_kinetics_mvit(pretrained_path, num_classes)
 
-        # if self.log is not None:
-        #     wandb.watch(self.model)
-
         self.lr = learning_rate
-        self.loss = torch.nn.CrossEntropyLoss()
+        self.loss = eval(loss_func)
         self.momentum = momentum
         self.weight_decay = weight_decay
         self.max_epochs = max_epochs
 
-        self.train_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, multiclass=True)
-
-        self.val_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, multiclass=True)
-
-        # only use for validation!
-        self.ground_truths = []
-        self.predictions = []
-        self.confidences = []
+        self.train_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, multiclass=True, average=None)
+        self.val_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, multiclass=True, average=None)
+        
         self.class_names = label_mapping.class_names
 
     def forward(self, input):
@@ -54,68 +47,87 @@ class LitMViT(pl.LightningModule):
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
-        # training_step defines the train loop.
-        # print(batch)
         x = batch["frames"]
         targets = batch["label"]
+        offsets = batch["label_offset"]
         y = self.model(x)
 
-        loss = self.loss(y, targets)
-        self.log("train/batch_loss", loss)
+        loss = self.loss(y, targets, offsets)
+        self.log("train/batch_loss", loss.mean())
 
-        batch_acc = self.train_accuracy(y, targets)
-        self.log("train/batch_acc", batch_acc)
+        batch_acc = self.train_accuracy.update(y, targets)
+        self.log("train/batch_acc", torch.mean(batch_acc))
         return loss
 
     def training_epoch_end(self, outputs):
         self.log("train/epoch_loss", np.mean([item["loss"].item() for item in outputs]))
-        self.log("train/epoch_acc", self.train_accuracy.compute())
+        acc_per_class = self.train_accuracy.compute()
+        wandb.log("train/acc", torch.mean(acc_per_class))
+        
+        acc_dict = {n : acc_per_class[i] for i, n in enumerate(self.class_names)}
+        self.log("train/acc_classes", acc_dict)
+
         self.train_accuracy.reset()
 
     def validation_step(self, batch, batch_idx):
         x = batch["frames"]
         targets = batch["label"]
+        offsets = batch["label_offset"]
         y = self.model(x)
+        loss = self.loss(y, targets, offsets)
 
-        loss = self.loss(y, targets)
-        self.log("val/batch_loss", loss)
+        self.log("val/batch_loss", loss.mean())
 
         self.val_accuracy.update(y, targets)
         soft_y = y.detach().cpu().softmax(dim=-1)
-        # save predicition and ground truth for validation metrics
-        for b in range(x.shape[0]):
-            self.predictions.append(soft_y[b].argmax().item())
-            self.confidences.append(soft_y[b])
-            self.ground_truths.append(targets[b].detach().cpu().item())
 
-        return {"loss": loss.item()}
+        # save prediction and ground truth for validation metrics
+        ground_truths = []
+        predictions = []
+        confidences = []
+        for b in range(batch["positions"].shape[0]):
+            predictions.append(soft_y[b].argmax().item())
+            confidences.append(soft_y[b])
+            ground_truths.append(targets[b].detach().cpu().item())
+
+        return {"loss": loss, "predictions" : predictions, "confidences" : confidences, "ground_truths" : ground_truths}
 
     def validation_epoch_end(self, outputs) -> None:
-        self.log("val/acc", self.val_accuracy.compute())
-        self.log("val/loss", np.mean([output["loss"] for output in outputs]))
+        losses = []
+        confidences = []
+        predictions = []
+        targets = []
+        for output in outputs:
+            losses.append(output["loss"].item())
+            confidences.extend(output["confidences"])
+            predictions.extend(output["predictions"])
+            targets.extend(output["ground_truths"])
+
+        acc_per_class = self.val_accuracy.compute()
+        self.log("val/acc", torch.mean(acc_per_class))
+        acc_dict = {n : acc_per_class[i] for i, n in enumerate(self.class_names)}
+        self.log("val/acc_per_class", acc_dict)
+        self.log("val/loss", np.mean(losses))
 
         cm = wandb.plot.confusion_matrix(
-            y_true=self.ground_truths,
-            preds=self.predictions,
+            y_true=targets,
+            preds=predictions,
             class_names=self.class_names,
             title="Confusion Matrix",
         )
 
         wandb.log({"val/conf_mat": cm})
 
-        self.confidences = torch.stack(self.confidences)
+        confidences = torch.stack(confidences)
         pr = wandb.plot.pr_curve(
-            self.ground_truths,
-            self.confidences,
+            targets,
+            confidences,
             labels=self.class_names,
             title="Precision vs. Recall per class",
         )
 
         wandb.log({"val/prec_rec": pr})
 
-        self.ground_truths = []
-        self.predictions = []
-        self.confidences = []
         self.val_accuracy.reset()
 
     def configure_optimizers(self):
@@ -146,7 +158,8 @@ class LitGAT(pl.LightningModule):
         label_mapping: LabelDecoder,
         momentum: float,
         weight_decay: float,
-        max_epochs: int
+        max_epochs: int,
+        loss_func: callable
     ) -> None:
         super().__init__()
         num_classes = label_mapping.num_classes
@@ -162,19 +175,14 @@ class LitGAT(pl.LightningModule):
         )
 
         self.lr = learning_rate
-        self.loss = torch.nn.CrossEntropyLoss()
+        self.loss = eval(loss_func)
         self.momentum = momentum
         self.weight_decay = weight_decay
         self.max_epochs = max_epochs
 
-        self.train_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, multiclass=True)
-
-        self.val_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, multiclass=True)
-
-        # only use for validation!
-        self.ground_truths = []
-        self.predictions = []
-        self.confidences = []
+        self.train_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, multiclass=True, average=None)
+        self.val_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, multiclass=True, average=None)
+        
         self.class_names = label_mapping.class_names
 
     def forward(self, input):
@@ -189,61 +197,83 @@ class LitGAT(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         targets = batch["label"]
+        offsets = batch["label_offset"]
         y = self.forward(batch)
-        loss = self.loss(y, targets)
-        self.log("train/batch_loss", loss)
+        loss = self.loss(y, targets, offsets)
+        self.log("train/batch_loss", loss.mean())
 
-        batch_acc = self.train_accuracy(y, targets)
-        self.log("train/batch_acc", batch_acc)
+        batch_acc = self.train_accuracy.update(y, targets)
+        self.log("train/batch_acc", torch.mean(batch_acc))
         return loss
 
     def training_epoch_end(self, outputs):
         self.log("train/epoch_loss", np.mean([item["loss"].item() for item in outputs]))
-        self.log("train/epoch_acc", self.train_accuracy.compute())
+        acc_per_class = self.train_accuracy.compute()
+        wandb.log("train/acc", torch.mean(acc_per_class))
+        
+        acc_dict = {n : acc_per_class[i] for i, n in enumerate(self.class_names)}
+        self.log("train/acc_classes", acc_dict)
+
         self.train_accuracy.reset()
 
     def validation_step(self, batch, batch_idx):
         targets = batch["label"]
+        offsets = batch["label_offset"]
         y = self.forward(batch)
-        loss = self.loss(y, targets)
-        self.log("val/batch_loss", loss)
+        loss = self.loss(y, targets, offsets)
+
+        self.log("val/batch_loss", loss.mean())
 
         self.val_accuracy.update(y, targets)
         soft_y = y.detach().cpu().softmax(dim=-1)
-        # save predicition and ground truth for validation metrics
-        for b in range(batch["positions"].shape[0]):
-            self.predictions.append(soft_y[b].argmax().item())
-            self.confidences.append(soft_y[b])
-            self.ground_truths.append(targets[b].detach().cpu().item())
 
-        return {"loss": loss.item()}
+        # save prediction and ground truth for validation metrics
+        ground_truths = []
+        predictions = []
+        confidences = []
+        for b in range(batch["positions"].shape[0]):
+            predictions.append(soft_y[b].argmax().item())
+            confidences.append(soft_y[b])
+            ground_truths.append(targets[b].detach().cpu().item())
+
+        return {"loss": loss, "predictions" : predictions, "confidences" : confidences, "ground_truths" : ground_truths}
 
     def validation_epoch_end(self, outputs) -> None:
-        self.log("val/acc", self.val_accuracy.compute())
-        self.log("val/loss", np.mean([output["loss"] for output in outputs]))
+        losses = []
+        confidences = []
+        predictions = []
+        targets = []
+        for output in outputs:
+            losses.append(output["loss"].item())
+            confidences.extend(output["confidences"])
+            predictions.extend(output["predictions"])
+            targets.extend(output["ground_truths"])
+
+        acc_per_class = self.val_accuracy.compute()
+        self.log("val/acc", torch.mean(acc_per_class))
+        acc_dict = {n : acc_per_class[i] for i, n in enumerate(self.class_names)}
+        self.log("val/acc_per_class", acc_dict)
+        self.log("val/loss", np.mean(losses))
 
         cm = wandb.plot.confusion_matrix(
-            y_true=self.ground_truths,
-            preds=self.predictions,
+            y_true=targets,
+            preds=predictions,
             class_names=self.class_names,
             title="Confusion Matrix",
         )
 
         wandb.log({"val/conf_mat": cm})
 
-        self.confidences = torch.stack(self.confidences)
+        confidences = torch.stack(confidences)
         pr = wandb.plot.pr_curve(
-            self.ground_truths,
-            self.confidences,
+            targets,
+            confidences,
             labels=self.class_names,
             title="Precision vs. Recall per class",
         )
 
         wandb.log({"val/prec_rec": pr})
 
-        self.ground_truths = []
-        self.predictions = []
-        self.confidences = []
         self.val_accuracy.reset()
 
     def configure_optimizers(self):
@@ -259,3 +289,24 @@ class LitGAT(pl.LightningModule):
             last_epoch=-1,
         )
         return [optimizer], [scheduler]
+
+def unweighted_cross_entropy(batch_y : torch.Tensor, batch_gt : torch.Tensor, batch_label_offsets : torch.Tensor):
+    return torch.nn.functional.cross_entropy(batch_y, batch_gt)
+
+def weighted_cross_entropy(batch_y : torch.Tensor, batch_gt : torch.Tensor, batch_label_offsets : torch.Tensor):
+    """Computes the cross entropy loss between prediction and target.
+    Instances that portray an event in the second half of the sequence have reduced losses. 
+
+    Args:
+        batch_y (torch.Tensor): Predictions.
+        batch_gt (torch.Tensor): Targets.
+        batch_label_offsets (torch.Tensor): Label offsets.
+
+    Returns:
+        (torch.Tensor): Loss.
+    """
+    batch_losses = torch.nn.functional.cross_entropy(batch_y, batch_gt, reduction='none')
+    for i, o in enumerate(batch_label_offsets):
+        if o > 0:
+            batch_losses[i] *= 1/o
+    return batch_losses.mean()
