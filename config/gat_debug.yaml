@@ -39,6 +39,7 @@ model:
   learning_rate: 0.03
   momentum: 0.9
   weight_decay: 1e-4
+  loss_func: weighted_cross_entropy
 num_classes: 3
 checkpoint: ""
 callbacks:
@@ -46,5 +47,6 @@ callbacks:
     every_n: 1
     dir: experiments/gat/debug
 save_config: true
+log_proportions: true
 
 #https://github.com/pyg-team/pytorch_geometric/issues/999

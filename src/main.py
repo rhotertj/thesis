@@ -38,10 +38,11 @@ def main(conf):
     )
     lit_data.setup(conf.stage)
 
-    train_df = get_proportions_df(lit_data.data_train, label_decoder, conf.num_classes)
-    val_df = get_proportions_df(lit_data.data_val, label_decoder, conf.num_classes)
-    logger.log_table("train/classes", data=train_df)
-    logger.log_table("val/classes", data=val_df)
+    if conf.log_proportions:
+        train_df = get_proportions_df(lit_data.data_train, label_decoder, conf.num_classes)
+        val_df = get_proportions_df(lit_data.data_val, label_decoder, conf.num_classes)
+        logger.log_table("train/classes", data=train_df)
+        logger.log_table("val/classes", data=val_df)
     
     callbacks = []
 

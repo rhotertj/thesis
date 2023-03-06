@@ -41,3 +41,4 @@ callbacks:
     every_n: 1
     dir: experiments/mvit/train
 save_config: true
+log_proportions: true

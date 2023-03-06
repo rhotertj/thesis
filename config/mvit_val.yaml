@@ -38,3 +38,4 @@ callbacks:
     every_n: 1
     dir: experiments/mvit/val
 save_config: true
+log_proportions: true
