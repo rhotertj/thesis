@@ -24,6 +24,7 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
         sampling_rate : int = 2,
         load_frames : bool = True,
         batch_size : int = 1,
+        epsilon : int = 7,
         ) -> None:
 
         super().__init__()
@@ -31,6 +32,7 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
         self.meta_path_val = meta_path_val
         self.meta_path_test = meta_path_test
         self.overlap = overlap
+        self.collate_func = collate_function_builder(epsilon)
 
         self.seq_len = seq_len
         self.sampling_rate = sampling_rate
@@ -97,16 +99,16 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
                 )
 
     def train_dataloader(self):
-        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4,persistent_workers=True, pin_memory=True, shuffle=True)
+        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4,persistent_workers=True, pin_memory=True, shuffle=True, collate_fn=self.collate_func)
 
     def val_dataloader(self):
-        return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, persistent_workers=True)
+        return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, persistent_workers=True, collate_fn=self.collate_func)
 
     def test_dataloader(self):
-        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4)
+        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4, collate_fn=self.collate_func)
 
     def predict_dataloader(self):
-        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4)
+        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4, collate_fn=self.collate_func)
 
     def teardown(self, stage: str) -> None:
         # Nothing to do here (yet)
@@ -126,6 +128,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
         sampling_rate : int = 2,
         load_frames : bool = True,
         batch_size : int = 1,
+        epsilon : int = 7
         ) -> None:
         super().__init__()
 
@@ -133,6 +136,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
         self.idx_mapping_train = idx_mapping_train
         self.idx_mapping_val = idx_mapping_val
         self.idx_mapping_test = idx_mapping_test
+        self.collate_func = collate_function_builder(epsilon)
 
         self.seq_len = seq_len
         self.sampling_rate = sampling_rate
@@ -197,49 +201,53 @@ class LitResampledHblDataset(pl.LightningDataModule):
                 )
 
     def train_dataloader(self):
-        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4,persistent_workers=True, pin_memory=True, shuffle=True, collate_fn=multimodal_collate)
+        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4,persistent_workers=True, pin_memory=True, shuffle=True, collate_fn=self.collate_func,)
 
     def val_dataloader(self):
-        return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, persistent_workers=True, collate_fn=multimodal_collate)
+        return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, persistent_workers=True, collate_fn=self.collate_func)
 
     def test_dataloader(self):
-        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4)
+        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4, collate_fn=self.collate_func)
 
     def predict_dataloader(self):
-        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4)
+        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4, collate_fn=self.collate_func)
 
     def teardown(self, stage: str) -> None:
         # Nothing to do here (yet)
         pass
 
 
-def multimodal_collate(instances):
-    """Collate function that batches both position data and video data.
+def collate_function_builder(epsilon):
 
-    Args:
-        instances (list): List of instances to be batched.
+    def multimodal_collate(instances):
+        """Collate function that batches both position data and video data.
 
-    Returns:
-        dict: Batched instances.
-    """    
-    batch = {}
-    for k in instances[0].keys():
-        first_entry = instances[0][k]
-        if isinstance(first_entry, list): # might be empty (no frames), windows_indices
-            batch[k] = torch.stack([torch.Tensor(instance[k]) for instance in instances])
-            # if all empty, pass empty tensor
-            pass
-        elif isinstance(first_entry, torch.Tensor):
-            batch[k] = torch.stack([instance[k] for instance in instances])
-        elif isinstance(first_entry, np.ndarray): # frames, positions
-            if k == "positions":
-                graphs = [create_graph(torch.Tensor(instance[k]), 7) for instance in instances]
-                batch[k] = dgl.batch(graphs)
-            else:
-                batch[k] = torch.stack([torch.tensor(instance[k]) for instance in instances])
-            
-        elif isinstance(first_entry, (int, float, np.int64, np.float64)): # frame_idx, query_idx, label_offset, label, match_number
-            # create a simple list comprehension and then create tensor
-            batch[k] = torch.tensor([instance[k] for instance in instances])
+        Args:
+            instances (list): List of instances to be batched.
 
-    return batch
+        Returns:
+            dict: Batched instances.
+        """    
+        batch = {}
+        for k in instances[0].keys():
+            first_entry = instances[0][k]
+            if isinstance(first_entry, list): # might be empty (no frames), windows_indices
+                batch[k] = torch.stack([torch.Tensor(instance[k]) for instance in instances])
+
+            elif isinstance(first_entry, torch.Tensor):
+                batch[k] = torch.stack([instance[k] for instance in instances])
+
+            elif isinstance(first_entry, np.ndarray): # frames, positions
+                if k == "positions":
+                    graphs = [create_graph(torch.Tensor(instance[k]), epsilon) for instance in instances]
+                    batch[k] = dgl.batch(graphs)
+                else:
+                    batch[k] = torch.stack([torch.tensor(instance[k]) for instance in instances])
+                
+            elif isinstance(first_entry, (int, float, np.int64, np.float64)):
+                # frame_idx, query_idx, label_offset, label, match_number
+                batch[k] = torch.tensor([instance[k] for instance in instances])
+
+        return batch
+
+    return multimodal_collate

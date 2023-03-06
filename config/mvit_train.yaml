@@ -27,6 +27,7 @@ data:
   sampling_rate: 2
   load_frames: true
   batch_size: 16
+  epsilon : 7
   overlap: False
 model_class: LitMViT
 model:

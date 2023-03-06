@@ -28,6 +28,7 @@ data:
   load_frames: true
   batch_size: 16
   overlap: false
+  epsilon : 7
 model_class: LitMViT
 model:
   pretrained_path: "models/mvit_b_16x4.pt"

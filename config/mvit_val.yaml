@@ -26,6 +26,7 @@ data:
   sampling_rate: 4
   load_frames: true
   batch_size: 2
+  epsilon : 7
 model:
   pretrained_path: "models/mvit_b_16x4.pt"
   learning_rate: 0.01
