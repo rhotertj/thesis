@@ -1,7 +1,65 @@
 import torch
 from torch import Tensor
-import torchvision
+import torchvision.transforms.functional as F
 import numpy
+import random
+
+
+"""
+These classes are adapted from the torchvision image transforms.
+Unlike the claims in the documentation regarding the inputs shape, 
+torchvision has many sanity checks for the channel dimension to be at dimension 0.
+This collides with the temporal dimension in videos.
+'Irrelevant' parts or checks from the original codebase are omitted, just like jit flags.
+"""
+
+class ChannelFirst:
+    """Transpose a video from shape [T, C, H, W] to [C, T, H, W].
+    """    
+
+    def __init__(self) -> None:
+        pass
+
+    def __call__(self, video) -> torch.Tensor:
+        if not video.shape[1] in (1,3):
+            raise ValueError("Channel dimension expected at dimension 1.")
+        return torch.einsum("tchw->cthw", video)
+
+
+class TimeFirst:
+    """Transpose a video from shape [C, T, H, W] to [T, C, H, W].
+    """    
+    def __init__(self) -> None:
+        pass
+
+    def __call__(self, video) -> torch.Tensor:
+        if not video.shape[0] in (1,3):
+            raise ValueError("Channel dimension expected at dimension 0.")
+        return torch.einsum("cthw->tchw", video)
+
+class RandomHorizontalFlipVideo:
+    """
+    Flip the video clip along the horizontal direction with a given probability
+    Args:
+        p (float): probability of the clip being flipped. Default value is 0.5
+    """
+
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, clip):
+        """
+        Args:
+            clip (torch.tensor): Size is (C, T, H, W)
+        Return:
+            clip (torch.tensor): Size is (C, T, H, W)
+        """
+        if random.random() < self.p:
+            clip = F.hflip(clip)
+        return clip
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(p={self.p})"
 
 class FrameSequenceToTensor:
     """Convert a ``numpy.ndarray`` to tensor. This transform does not support torchscript.
