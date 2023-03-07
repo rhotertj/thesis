@@ -8,7 +8,7 @@ trainer: # logger extra
   overfit_batches: False # change int of n batches to debug with n batches
   check_val_every_n_epoch: 1
   accumulate_grad_batches: 2
-  max_epochs: 50
+  max_epochs: 100
   max_steps: -1
   max_time: null
   limit_train_batches: null # set fraction of training data
@@ -27,8 +27,9 @@ data:
   seq_len: 16
   sampling_rate: 2
   load_frames: false
-  batch_size: 8
+  batch_size: 16
   epsilon: 7
+  mix_video: False
 model_class: LitGAT
 model:
   dim_in: 49

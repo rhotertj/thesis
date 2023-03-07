@@ -40,24 +40,31 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
         self.load_frames = load_frames
         self.label_mapping = label_mapping
         self.batch_size = batch_size
-        self.transforms = t.Compose([
+        self.train_transforms = t.Compose([
             vt.FrameSequenceToTensor(),
-            t.Resize((224,224)),
             vt.TimeFirst(),
             t.ColorJitter(brightness=0.3, hue=.3, contrast=0.3, saturation=0.3),
             ptvt.RandAugment(),
             vt.ChannelFirst()
+            t.Resize((224,224)),
             # NormalizeVideo(
             #     mean=[0.39449842, 0.4566527, 0.49926605],
             #     std=[0.18728599, 0.21862774, 0.267905]
             #     ),
             ])
 
+        self.val_transforms = t.Compose([
+            vt.FrameSequenceToTensor(),
+            t.Resize((224,224))
+            ])
+
         if mix_video:
             video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes)
-            self.collate_func = collate_function_builder(epsilon, load_frames, video_transform)
-
-        self.collate_func = collate_function_builder(epsilon, load_frames)
+            self.train_collate = collate_function_builder(epsilon, load_frames, video_transform)
+        else:
+            self.train_collate = collate_function_builder(epsilon, load_frames)
+        
+        self.val_collate = collate_function_builder(epsilon, load_frames)
 
 
     def setup(self, stage : str):
@@ -70,7 +77,7 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
                     self.seq_len,
                     self.sampling_rate,
                     self.load_frames,
-                    self.transforms,
+                    self.train_transforms,
                     self.label_mapping,
                     self.overlap
                 )
@@ -79,7 +86,7 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
                     self.seq_len,
                     self.sampling_rate,
                     self.load_frames,
-                    self.transforms,
+                    self.val_transforms,
                     self.label_mapping,
                     self.overlap,
                 )
@@ -91,7 +98,7 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
                     self.seq_len,
                     self.sampling_rate,
                     self.load_frames,
-                    self.transforms,
+                    self.val_transforms,
                     self.label_mapping,
                     self.overlap,
                 )
@@ -103,22 +110,22 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
                     self.seq_len,
                     self.sampling_rate,
                     self.load_frames,
-                    self.transforms,
+                    self.val_transforms,
                     self.label_mapping,
                     self.overlap,
                 )
 
     def train_dataloader(self):
-        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4,persistent_workers=True, pin_memory=True, shuffle=True, collate_fn=self.collate_func)
+        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4,persistent_workers=True, pin_memory=True, shuffle=True, collate_fn=self.train_collate)
 
     def val_dataloader(self):
-        return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, persistent_workers=True, collate_fn=self.collate_func)
+        return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, persistent_workers=True, collate_fn=self.val_collate)
 
     def test_dataloader(self):
-        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4, collate_fn=self.collate_func)
+        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4, collate_fn=self.val_collate)
 
     def predict_dataloader(self):
-        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4, collate_fn=self.collate_func)
+        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4, collate_fn=self.val_collate)
 
     def teardown(self, stage: str) -> None:
         # Nothing to do here (yet)
@@ -153,24 +160,32 @@ class LitResampledHblDataset(pl.LightningDataModule):
         self.load_frames = load_frames
         self.label_mapping = label_mapping
         self.batch_size = batch_size
-        self.transforms = t.Compose([
+        self.train_transforms = t.Compose([
             vt.FrameSequenceToTensor(),
-            t.Resize((224,224)),
             vt.TimeFirst(),
             t.ColorJitter(brightness=0.3, hue=.3, contrast=0.3, saturation=0.3),
             ptvt.RandAugment(),
-            vt.ChannelFirst()
+            vt.ChannelFirst(),
+            t.Resize((224,224)),
             # NormalizeVideo(
             #     mean=[0.39449842, 0.4566527, 0.49926605],
             #     std=[0.18728599, 0.21862774, 0.267905]
             #     ),
             ])
 
+        self.val_transforms = t.Compose([
+            vt.FrameSequenceToTensor(),
+            t.Resize((224,224))
+            ])
+
         if mix_video:
             video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes)
-            self.collate_func = collate_function_builder(epsilon, load_frames, video_transform)
-            
-        self.collate_func = collate_function_builder(epsilon, load_frames)
+            self.train_collate = collate_function_builder(epsilon, load_frames, video_transform)
+        else:
+            self.train_collate = collate_function_builder(epsilon, load_frames)
+        
+        self.val_collate = collate_function_builder(epsilon, load_frames)
+
 
     def setup(self, stage : str):
         match stage:
@@ -184,7 +199,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
                     load_frames=self.load_frames,
                     seq_len=self.seq_len,
                     sampling_rate=self.sampling_rate,
-                    transforms=self.transforms
+                    transforms=self.train_transforms
                 )
                 self.data_val = ResampledHblDataset(
                     meta_path=Path(self.meta_path) / "meta3d_val.csv",
@@ -193,7 +208,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
                     load_frames=self.load_frames,
                     seq_len=self.seq_len,
                     sampling_rate=self.sampling_rate,
-                    transforms=self.transforms
+                    transforms=self.val_transforms
                 )
             
             case "validate":
@@ -205,7 +220,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
                     load_frames=self.load_frames,
                     seq_len=self.seq_len,
                     sampling_rate=self.sampling_rate,
-                    transforms=self.transforms
+                    transforms=self.val_transforms
                 )
             case "test":
 
@@ -216,20 +231,20 @@ class LitResampledHblDataset(pl.LightningDataModule):
                     load_frames=self.load_frames,
                     seq_len=self.seq_len,
                     sampling_rate=self.sampling_rate,
-                    transforms=self.transforms
+                    transforms=self.val_transforms
                 )
 
     def train_dataloader(self):
-        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4,persistent_workers=True, pin_memory=True, shuffle=True, collate_fn=self.collate_func,)
+        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4, persistent_workers=True, pin_memory=True, shuffle=True, collate_fn=self.train_collate,)
 
     def val_dataloader(self):
-        return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, persistent_workers=True, collate_fn=self.collate_func)
+        return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, collate_fn=self.val_collate)
 
     def test_dataloader(self):
-        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4, collate_fn=self.collate_func)
+        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=1, collate_fn=self.val_collate)
 
     def predict_dataloader(self):
-        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4, collate_fn=self.collate_func)
+        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=1, collate_fn=self.val_collate)
 
     def teardown(self, stage: str) -> None:
         # Nothing to do here (yet)
@@ -245,7 +260,7 @@ def collate_function_builder(epsilon : int, load_frames : bool, mix_video : call
 
         Returns:
             dict: Batched instances.
-        """    
+        """
         batch = {}
         for k in instances[0].keys():
             if k == "frames" and not load_frames:

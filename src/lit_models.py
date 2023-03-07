@@ -54,6 +54,9 @@ class LitMViT(pl.LightningModule):
         loss = self.loss(y, targets, offsets)
         self.log("train/batch_loss", loss.mean())
 
+        if targets.ndim == 2:
+            targets = targets.argmax(-1)
+
         self.train_accuracy.update(y, targets)
         self.log("train/batch_acc", torch.mean((targets == y.argmax(-1)).to(torch.float32)))
         return loss
@@ -61,7 +64,7 @@ class LitMViT(pl.LightningModule):
     def training_epoch_end(self, outputs):
         self.log("train/epoch_loss", np.mean([item["loss"].item() for item in outputs]))
         acc_per_class = self.train_accuracy.compute()
-        wandb.log("train/acc", torch.mean(acc_per_class))
+        self.log("train/acc", torch.mean(acc_per_class))
         
         acc_dict = {n : acc_per_class[i] for i, n in enumerate(self.class_names)}
         self.log("train/acc_classes", acc_dict)
@@ -77,15 +80,15 @@ class LitMViT(pl.LightningModule):
         self.log("val/batch_loss", loss.mean())
 
         self.val_accuracy.update(y, targets)
-        soft_y = y.detach().cpu().softmax(dim=-1)
+        preds = y.detach().cpu()
 
         # save prediction and ground truth for validation metrics
         ground_truths = []
         predictions = []
         confidences = []
-        for b in range(batch["positions"].shape[0]):
-            predictions.append(soft_y[b].argmax().item())
-            confidences.append(soft_y[b])
+        for b in range(len(targets)):
+            predictions.append(preds[b].argmax().item())
+            confidences.append(preds[b])
             ground_truths.append(targets[b].detach().cpu().item())
 
         return {"loss": loss, "predictions" : predictions, "confidences" : confidences, "ground_truths" : ground_truths}
@@ -216,15 +219,15 @@ class LitGAT(pl.LightningModule):
         self.log("val/batch_loss", loss.mean())
 
         self.val_accuracy.update(y, targets)
-        soft_y = y.detach().cpu().softmax(dim=-1)
+        preds = y.detach().cpu()
 
         # save prediction and ground truth for validation metrics
         ground_truths = []
         predictions = []
         confidences = []
         for b in range(len(targets)):
-            predictions.append(soft_y[b].argmax().item())
-            confidences.append(soft_y[b])
+            predictions.append(preds[b].argmax().item())
+            confidences.append(preds[b])
             ground_truths.append(targets[b].detach().cpu().item())
 
         return {"loss": loss, "predictions" : predictions, "confidences" : confidences, "ground_truths" : ground_truths}
