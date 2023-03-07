@@ -47,10 +47,9 @@ class LitMViT(pl.LightningModule):
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
-        x = batch["frames"]
         targets = batch["label"]
         offsets = batch["label_offset"]
-        y = self.model(x)
+        y = self.forward(batch)
 
         loss = self.loss(y, targets, offsets)
         self.log("train/batch_loss", loss.mean())
@@ -70,10 +69,9 @@ class LitMViT(pl.LightningModule):
         self.train_accuracy.reset()
 
     def validation_step(self, batch, batch_idx):
-        x = batch["frames"]
         targets = batch["label"]
         offsets = batch["label_offset"]
-        y = self.model(x)
+        y = self.forward(batch)
         loss = self.loss(y, targets, offsets)
 
         self.log("val/batch_loss", loss.mean())
@@ -148,7 +146,6 @@ class LitGAT(pl.LightningModule):
 
     def __init__(
         self,
-        epsilon : float,
         dim_in: int,
         dim_h: int,
         heads : int,
@@ -163,7 +160,6 @@ class LitGAT(pl.LightningModule):
     ) -> None:
         super().__init__()
         num_classes = label_mapping.num_classes
-        self.epsilon = epsilon
 
         self.model = GAT(
             dim_h=dim_h,
