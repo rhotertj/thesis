@@ -1,11 +1,12 @@
 from torch.utils.data import DataLoader, random_split
 from pathlib import Path
 import pytorch_lightning as pl
-from torchvision import transforms as t
 import torch
 import numpy as np
 import dgl
-from video_transforms import FrameSequenceToTensor, NormalizeVideo
+from torchvision import transforms as t
+import video_transforms as vt
+import pytorchvideo.transforms as ptvt
 
 from data.datasets import MultiModalHblDataset, ResampledHblDataset
 from data.labels import LabelDecoder
@@ -25,29 +26,38 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
         load_frames : bool = True,
         batch_size : int = 1,
         epsilon : int = 7,
+        mix_video : bool = True
         ) -> None:
 
         super().__init__()
         self.meta_path_train = meta_path_train
         self.meta_path_val = meta_path_val
         self.meta_path_test = meta_path_test
-        self.overlap = overlap
-        self.collate_func = collate_function_builder(epsilon)
 
+        self.overlap = overlap
         self.seq_len = seq_len
         self.sampling_rate = sampling_rate
         self.load_frames = load_frames
         self.label_mapping = label_mapping
         self.batch_size = batch_size
         self.transforms = t.Compose([
-            FrameSequenceToTensor(),
+            vt.FrameSequenceToTensor(),
             t.Resize((224,224)),
-            # t.CenterCrop(224),
+            vt.TimeFirst(),
+            t.ColorJitter(brightness=0.3, hue=.3, contrast=0.3, saturation=0.3),
+            ptvt.RandAugment(),
+            vt.ChannelFirst()
             # NormalizeVideo(
             #     mean=[0.39449842, 0.4566527, 0.49926605],
             #     std=[0.18728599, 0.21862774, 0.267905]
             #     ),
             ])
+
+        if mix_video:
+            video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes)
+            self.collate_func = collate_function_builder(epsilon, load_frames, video_transform)
+
+        self.collate_func = collate_function_builder(epsilon, load_frames)
 
 
     def setup(self, stage : str):
@@ -128,7 +138,8 @@ class LitResampledHblDataset(pl.LightningDataModule):
         sampling_rate : int = 2,
         load_frames : bool = True,
         batch_size : int = 1,
-        epsilon : int = 7
+        epsilon : int = 7,
+        mix_video : bool = True
         ) -> None:
         super().__init__()
 
@@ -136,7 +147,6 @@ class LitResampledHblDataset(pl.LightningDataModule):
         self.idx_mapping_train = idx_mapping_train
         self.idx_mapping_val = idx_mapping_val
         self.idx_mapping_test = idx_mapping_test
-        self.collate_func = collate_function_builder(epsilon)
 
         self.seq_len = seq_len
         self.sampling_rate = sampling_rate
@@ -144,14 +154,23 @@ class LitResampledHblDataset(pl.LightningDataModule):
         self.label_mapping = label_mapping
         self.batch_size = batch_size
         self.transforms = t.Compose([
-            FrameSequenceToTensor(),
+            vt.FrameSequenceToTensor(),
             t.Resize((224,224)),
-            # t.CenterCrop(224),
+            vt.TimeFirst(),
+            t.ColorJitter(brightness=0.3, hue=.3, contrast=0.3, saturation=0.3),
+            ptvt.RandAugment(),
+            vt.ChannelFirst()
             # NormalizeVideo(
             #     mean=[0.39449842, 0.4566527, 0.49926605],
             #     std=[0.18728599, 0.21862774, 0.267905]
             #     ),
             ])
+
+        if mix_video:
+            video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes)
+            self.collate_func = collate_function_builder(epsilon, load_frames, video_transform)
+            
+        self.collate_func = collate_function_builder(epsilon, load_frames)
 
     def setup(self, stage : str):
         match stage:
@@ -216,10 +235,9 @@ class LitResampledHblDataset(pl.LightningDataModule):
         # Nothing to do here (yet)
         pass
 
+def collate_function_builder(epsilon : int, load_frames : bool, mix_video : callable = None):
 
-def collate_function_builder(epsilon):
-
-    def multimodal_collate(instances):
+    def multimodal_collate(instances : list):
         """Collate function that batches both position data and video data.
 
         Args:
@@ -230,6 +248,9 @@ def collate_function_builder(epsilon):
         """    
         batch = {}
         for k in instances[0].keys():
+            if k == "frames" and not load_frames:
+                continue
+
             first_entry = instances[0][k]
             if isinstance(first_entry, list): # might be empty (no frames), windows_indices
                 batch[k] = torch.stack([torch.Tensor(instance[k]) for instance in instances])
@@ -248,6 +269,8 @@ def collate_function_builder(epsilon):
                 # frame_idx, query_idx, label_offset, label, match_number
                 batch[k] = torch.tensor([instance[k] for instance in instances])
 
+        if mix_video:
+            batch["frames"], batch["label"] = mix_video(batch["frames"], batch["label"])
         return batch
 
     return multimodal_collate
