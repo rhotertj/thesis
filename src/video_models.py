@@ -35,7 +35,7 @@ def make_kinetics_mvit(ckpt_path : str, num_classes : int):
             out_features=num_classes,
             seq_pool_type="cls",
             dropout_rate=0.5,
-            activation=None,
+            activation=torch.nn.Softmax,
         )
 
     model.head = new_head
@@ -44,7 +44,7 @@ def make_kinetics_mvit(ckpt_path : str, num_classes : int):
 
 
 if __name__ == "__main__":
-    from data import MultiModalHblDataset
+    from data.datasets import MultiModalHblDataset
     import torch
     import numpy as np
     from torchvision.transforms.functional import center_crop
