@@ -45,7 +45,7 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
             vt.TimeFirst(),
             t.ColorJitter(brightness=0.3, hue=.3, contrast=0.3, saturation=0.3),
             ptvt.RandAugment(),
-            vt.ChannelFirst()
+            vt.ChannelFirst(),
             t.Resize((224,224)),
             # NormalizeVideo(
             #     mean=[0.39449842, 0.4566527, 0.49926605],
