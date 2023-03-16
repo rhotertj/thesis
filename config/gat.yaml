@@ -8,7 +8,7 @@ trainer: # logger extra
   overfit_batches: False # change int of n batches to debug with n batches
   check_val_every_n_epoch: 1
   accumulate_grad_batches: 2
-  max_epochs: 100
+  max_epochs: 200
   max_steps: -1
   max_time: null
   limit_train_batches: null # set fraction of training data
@@ -37,16 +37,16 @@ model:
   readout: "mean"
   input_embedding: true
   heads: 8
-  learning_rate: 0.03
+  learning_rate: 0.05
   momentum: 0.9
   weight_decay: 1e-4
-  loss_func: weighted_cross_entropy
+  loss_func: unweighted_cross_entropy
 num_classes: 3
 checkpoint: ""
 callbacks:
   checkpointing:
     every_n: 1
-    dir: experiments/gat/debug
+    dir: experiments/gat/train
 save_config: true
 log_proportions: true
 
