@@ -1,6 +1,6 @@
 import torch
 import pytorch_lightning as pl
-from pytorch_lightning.cli import LightningCLI
+import pytorchvideo
 import torchmetrics as tm
 import wandb
 from torchvision.transforms.functional import center_crop
@@ -11,125 +11,136 @@ import itertools
 from utils import draw_trajectory, plot_confmat
 from video_models import make_kinetics_mvit
 from graph_models import GAT
-import dgl
-from data.labels import LabelDecoder
-from data.data_utils import create_graph
 
-class LitMViT(pl.LightningModule):
+from data.labels import LabelDecoder
+
+class LitUniModal(pl.LightningModule):
 
     def __init__(
         self,
-        pretrained_path: str,
         learning_rate: float,
         label_mapping: LabelDecoder,
         momentum: float,
         weight_decay: float,
         max_epochs: int,
-        loss_func : callable
+        loss_func : callable,
+        model : torch.nn.Module
     ) -> None:
         super().__init__()
         num_classes = label_mapping.num_classes
-        self.model = make_kinetics_mvit(pretrained_path, num_classes)
+        self.model = model
+
+        wandb.watch(self.model)
 
         self.lr = learning_rate
         self.loss = eval(loss_func)
         self.momentum = momentum
         self.weight_decay = weight_decay
         self.max_epochs = max_epochs
+        self.class_names = label_mapping.class_names
+
 
         self.train_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, multiclass=True, average=None)
         self.val_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, multiclass=True, average=None)
-        
-        self.class_names = label_mapping.class_names
+
+        # cache, needed from lightning v2.0.0
+        self.ground_truths = []
+        self.predictions = []
+        self.confidences = []
+        self.val_loss = []
+        self.train_loss = []
 
     def forward(self, input):
-        x = input["frames"]
+        # TODO Pass x wrt model class
+        if isinstance(self.model, pytorchvideo.models.vision_transformers.MultiscaleVisionTransformers):
+            x = input["frames"]
+        else:
+            x = input["positions"]
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
+        # print("Enter step")
         targets = batch["label"]
         offsets = batch["label_offset"]
         y = self.forward(batch)
 
-        loss = self.loss(y, targets, offsets)
-        self.log("train/batch_loss", loss.mean())
+        loss = self.loss(y, targets)
+        # loss = self.loss(y, targets, offsets)
+        self.log("train/batch_loss", loss)
+        self.train_loss.append(loss.detach().cpu().item())
 
-        if targets.ndim == 2:
-            targets = targets.argmax(-1)
+        # if targets.ndim == 2:
+        #     targets = targets.argmax(-1)
 
         self.train_accuracy.update(y, targets)
         self.log("train/batch_acc", torch.mean((targets == y.argmax(-1)).to(torch.float32)))
+        # print("Exit step")
         return loss
 
-    def training_epoch_end(self, outputs):
-        self.log("train/epoch_loss", np.mean([item["loss"].item() for item in outputs]))
+    def on_train_epoch_start(self):
+        self.train_accuracy.reset()
+        self.train_loss.clear()
+
+    def on_train_epoch_end(self):
+        self.log("train/epoch_loss", np.mean(self.train_loss))
         acc_per_class = self.train_accuracy.compute()
         self.log("train/acc", torch.mean(acc_per_class))
         
-        acc_dict = {n : acc_per_class[i] for i, n in enumerate(self.class_names)}
-        self.log("train/acc_classes", acc_dict)
+        acc_dict = {f"train/acc_{n}" : acc_per_class[i] for i, n in enumerate(self.class_names)}
+        self.log_dict(acc_dict)
 
-        self.train_accuracy.reset()
+    def on_validation_epoch_start(self) -> None:
+        self.ground_truths.clear()
+        self.predictions.clear()
+        self.confidences.clear()
+        self.val_loss.clear()
+        
+        self.val_accuracy.reset()
 
     def validation_step(self, batch, batch_idx):
         targets = batch["label"]
         offsets = batch["label_offset"]
         y = self.forward(batch)
-        loss = self.loss(y, targets, offsets)
-
+        loss = self.loss(y, targets)
+        #loss = self.loss(y, targets, offsets)
         self.log("val/batch_loss", loss.mean())
 
         self.val_accuracy.update(y, targets)
         preds = y.detach().cpu()
 
         # save prediction and ground truth for validation metrics
-        ground_truths = []
-        predictions = []
-        confidences = []
         for b in range(len(targets)):
-            predictions.append(preds[b].argmax().item())
-            confidences.append(preds[b])
-            ground_truths.append(targets[b].detach().cpu().item())
+            self.predictions.append(preds[b].argmax().item())
+            self.confidences.append(preds[b])
+            self.ground_truths.append(targets[b].detach().cpu().item())
+        self.val_loss.append(loss.detach().cpu().item())
 
-        return {"loss": loss, "predictions" : predictions, "confidences" : confidences, "ground_truths" : ground_truths}
 
-    def validation_epoch_end(self, outputs) -> None:
-        losses = []
-        confidences = []
-        predictions = []
-        targets = []
-        for output in outputs:
-            losses.append(output["loss"].item())
-            confidences.extend(output["confidences"])
-            predictions.extend(output["predictions"])
-            targets.extend(output["ground_truths"])
-
+    def on_validation_epoch_end(self) -> None:
         acc_per_class = self.val_accuracy.compute()
         self.log("val/acc", torch.mean(acc_per_class))
-        acc_dict = {n : acc_per_class[i] for i, n in enumerate(self.class_names)}
-        self.log("val/acc_per_class", acc_dict)
-        self.log("val/loss", np.mean(losses))
+        acc_dict = {f"val/acc_{n}" : acc_per_class[i] for i, n in enumerate(self.class_names)}
+        self.log_dict(acc_dict)
+        self.log("val/loss", np.mean(self.val_loss))
 
         cm = wandb.plot.confusion_matrix(
-            y_true=targets,
-            preds=predictions,
+            y_true=self.ground_truths,
+            preds=self.predictions,
             class_names=self.class_names,
             title="Confusion Matrix",
         )
 
         wandb.log({"val/conf_mat": cm})
 
-        confidences = torch.stack(confidences)
+        confidences = torch.stack(self.confidences)
         pr = wandb.plot.pr_curve(
-            targets,
+            self.ground_truths,
             confidences,
             labels=self.class_names,
             title="Precision vs. Recall per class",
         )
 
         wandb.log({"val/prec_rec": pr})
-
-        self.val_accuracy.reset()
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(
@@ -164,14 +175,7 @@ class LitGAT(pl.LightningModule):
         super().__init__()
         num_classes = label_mapping.num_classes
 
-        self.model = GAT(
-            dim_h=dim_h,
-            dim_in=dim_in,
-            num_classes=num_classes,
-            readout=readout,
-            heads=heads,
-            input_embedding=input_embedding
-        )
+        
 
         self.lr = learning_rate
         self.loss = eval(loss_func)
@@ -200,6 +204,9 @@ class LitGAT(pl.LightningModule):
         self.log("train/batch_acc", torch.mean((targets == y.argmax(-1)).to(torch.float32)))
         return loss
 
+    def on_train_epoch_start(self):
+        self.train_accuracy.reset()
+
     def training_epoch_end(self, outputs):
         self.log("train/epoch_loss", np.mean([item["loss"].item() for item in outputs]))
         acc_per_class = self.train_accuracy.compute()
@@ -208,7 +215,6 @@ class LitGAT(pl.LightningModule):
         acc_dict = {n : acc_per_class[i] for i, n in enumerate(self.class_names)}
         self.log("train/acc_classes", acc_dict)
 
-        self.train_accuracy.reset()
 
     def validation_step(self, batch, batch_idx):
         targets = batch["label"]
@@ -295,7 +301,7 @@ def unweighted_cross_entropy(batch_y : torch.Tensor, batch_gt : torch.Tensor, ba
     Returns:
         torch.Tensor: Loss.
     """    
-    return torch.nn.functional.cross_entropy(batch_y, batch_gt)
+    return torch.nn.functional.cross_entropy(batch_y, batch_gt, label_smoothing=0.1)
 
 def weighted_cross_entropy(batch_y : torch.Tensor, batch_gt : torch.Tensor, batch_label_offsets : torch.Tensor):
     """Computes the cross entropy loss between prediction and target.
@@ -309,7 +315,7 @@ def weighted_cross_entropy(batch_y : torch.Tensor, batch_gt : torch.Tensor, batc
     Returns:
         (torch.Tensor): Loss.
     """
-    batch_losses = torch.nn.functional.cross_entropy(batch_y, batch_gt, reduction='none')
+    batch_losses = torch.nn.functional.cross_entropy(batch_y, batch_gt, reduction='none', label_smoothing=0.1)
     for i, o in enumerate(batch_label_offsets):
         if o > 0:
             batch_losses[i] *= 1/o

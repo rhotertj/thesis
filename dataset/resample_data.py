@@ -130,12 +130,13 @@ def load_split_matches_df(data_path: Path, sequence_length: int, sampling_rate: 
     return dfs
 
 
-def balance_classes(overlap_df: pd.DataFrame, chunk_df: pd.DataFrame) -> pd.DataFrame:
-    # TODO Size of background class
+def balance_classes(overlap_df: pd.DataFrame, chunk_df: pd.DataFrame, background_size: float = 0.6) -> pd.DataFrame:
     overlapped_shots = overlap_df[overlap_df.class_coarse == "Shot"]
     overlapped_passes = overlap_df[overlap_df.class_coarse == "Pass"].iloc[:len(overlapped_shots)]
-    simple_background = chunk_df[chunk_df.shot.isnull()]
-    balanced_df = pd.concat([overlapped_passes, simple_background, overlapped_shots])
+    n_sp = len(overlapped_passes) + len(overlapped_shots)
+    n_background = int(n_sp / background_size)
+    overlapped_background = overlap_df[overlap_df.shot.isnull()].sample(n_background)
+    balanced_df = pd.concat([overlapped_passes, overlapped_background, overlapped_shots])
     balanced_df.sort_values(by=["frame_idx"], inplace=True)
     balanced_df.reset_index(inplace=True, drop=True)
     return balanced_df
@@ -149,6 +150,7 @@ if "__main__" == __name__:
     parser.add_argument('-m', "--mode", type=str, help='Splitting criterion.', choices=['matches', 'random', 'time'])
     parser.add_argument('-v', "--val_size", type=float, help="Split size of validation set.", default=0.15)
     parser.add_argument('-t', "--test_size", type=float, help="Split size of test set.", default=0.15)
+    parser.add_argument('-bs', "--background_size", type=float, default=0.6, help="Proportion of the background class when balancing proportions.")
     parser.add_argument(
         '-b', "--balanced", type=bool, help="Whether upsampling of underrepresented classes takes place.", default=False
     )
@@ -186,7 +188,7 @@ if "__main__" == __name__:
         if args.balanced:
             overlapped_dfs, chunk_dfs = split_match_dfs
             for split, overlap_df, chunk_df in zip(["train", "val", "test"], overlapped_dfs, chunk_dfs):
-                split_df = balance_classes(overlap_df, chunk_df)
+                split_df = balance_classes(overlap_df, chunk_df, args.background_size)
                 splits[split] = split_df
 
         else:

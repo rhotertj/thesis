@@ -2,7 +2,7 @@ import torch
 from pytorchvideo.models.vision_transformers import create_multiscale_vision_transformers
 from pytorchvideo.models.head import create_vit_basic_head
 
-def make_kinetics_mvit(ckpt_path : str, num_classes : int):
+def make_kinetics_mvit(pretrained_path : str, num_classes : int):
     spatial_size = 224
     temporal_size = 16
     embed_dim_mul = [[1, 2.0], [3, 2.0], [14, 2.0]]
@@ -22,7 +22,7 @@ def make_kinetics_mvit(ckpt_path : str, num_classes : int):
         head=None
     )
 
-    ckpt = torch.load(ckpt_path)
+    ckpt = torch.load(pretrained_path)
     model.load_state_dict(ckpt["model_state"], strict=False) # allow different head
 
     zeros = torch.zeros(1, 3, 16, 224, 224)

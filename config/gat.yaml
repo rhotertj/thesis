@@ -2,13 +2,14 @@ seed_everything: 43
 stage: train
 logger:
   project: thesis_gat
-  offline: false
+
 trainer: # logger extra
+  num_nodes: 1
   devices: 1
-  overfit_batches: False # change int of n batches to debug with n batches
+  overfit_batches: false # change int of n batches to debug with n batches
   check_val_every_n_epoch: 1
   accumulate_grad_batches: 2
-  max_epochs: 200
+  max_epochs: 30
   max_steps: -1
   max_time: null
   limit_train_batches: null # set fraction of training data
@@ -18,36 +19,49 @@ trainer: # logger extra
   accelerator: "gpu"
   precision: 32
   num_sanity_val_steps: 1
-dataset: LitResampledHblDataset
+
 data:
-  meta_path: "/nfs/home/rhotertj/datasets/hbl/"
-  idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta3d_train.jsonl"
-  idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta3d_val.jsonl"
-  idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta3d_test.jsonl"
-  seq_len: 16
-  sampling_rate: 2
-  load_frames: false
-  batch_size: 16
-  epsilon: 7
-  mix_video: False
-model_class: LitGAT
+  name: LitResampledHblDataset
+  params:
+    meta_path: "/nfs/home/rhotertj/datasets/hbl/"
+    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta3d_train.jsonl"
+    idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta3d_val.jsonl"
+    idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta3d_test.jsonl"
+    seq_len: 16
+    sampling_rate: 2
+    load_frames: false
+    batch_size: 16
+    epsilon : 7
+    mix_video: True
+
 model:
-  dim_in: 49
-  dim_h: 128
-  readout: "mean"
-  input_embedding: true
-  heads: 8
-  learning_rate: 0.05
-  momentum: 0.9
-  weight_decay: 1e-4
-  loss_func: unweighted_cross_entropy
+  name: GAT
+  params:
+    dim_in: 49
+    dim_h: 128
+    readout: "mean"
+    input_embedding: true
+    heads: 8
+
+lit_model:
+  name: LitUniModal
+  params:
+    momentum: 0.9
+    learning_rate: 0.03
+    weight_decay: 1e-4
+    loss_func: unweighted_cross_entropy
+
 num_classes: 3
-checkpoint: ""
+checkpoint: null
+save_config: true
+log_proportions: true
+
 callbacks:
   checkpointing:
     every_n: 1
     dir: experiments/gat/train
-save_config: true
-log_proportions: true
-
-#https://github.com/pyg-team/pytorch_geometric/issues/999
+  early_stopping:
+    monitor: "train/acc"
+    patience: 3
+    mode: max
+    check_on_train_epoch_end: True

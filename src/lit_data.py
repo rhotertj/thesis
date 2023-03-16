@@ -12,6 +12,11 @@ from data.datasets import MultiModalHblDataset, ResampledHblDataset
 from data.labels import LabelDecoder
 from data.data_utils import create_graph
 
+# NormalizeVideo(
+#     mean=[0.39449842, 0.4566527, 0.49926605],
+#     std=[0.18728599, 0.21862774, 0.267905]
+#),
+
 class LitMultiModalHblDataset(pl.LightningDataModule):
 
     def __init__(
@@ -42,16 +47,14 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
         self.batch_size = batch_size
         self.train_transforms = t.Compose([
             vt.FrameSequenceToTensor(),
+            vt.RandomHorizontalFlipVideo(p=0.5),
             vt.TimeFirst(),
-            t.ColorJitter(brightness=0.3, hue=.3, contrast=0.3, saturation=0.3),
-            ptvt.RandAugment(),
+            t.ColorJitter(brightness=0.2, hue=.2, contrast=0.2, saturation=0.2),
+            ptvt.RandAugment(num_layers=3, prob=0.5, magnitude=5),
             vt.ChannelFirst(),
             t.Resize((224,224)),
-            # NormalizeVideo(
-            #     mean=[0.39449842, 0.4566527, 0.49926605],
-            #     std=[0.18728599, 0.21862774, 0.267905]
-            #     ),
             ])
+            
 
         self.val_transforms = t.Compose([
             vt.FrameSequenceToTensor(),
@@ -59,7 +62,7 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
             ])
 
         if mix_video:
-            video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes)
+            video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes, mixup_alpha=0.8)
             self.train_collate = collate_function_builder(epsilon, load_frames, video_transform)
         else:
             self.train_collate = collate_function_builder(epsilon, load_frames)
@@ -162,24 +165,21 @@ class LitResampledHblDataset(pl.LightningDataModule):
         self.batch_size = batch_size
         self.train_transforms = t.Compose([
             vt.FrameSequenceToTensor(),
+            vt.RandomHorizontalFlipVideo(p=0.5),
             vt.TimeFirst(),
-            t.ColorJitter(brightness=0.3, hue=.3, contrast=0.3, saturation=0.3),
-            ptvt.RandAugment(),
+            t.ColorJitter(brightness=0.2, hue=.2, contrast=0.2, saturation=0.2),
+            # ptvt.RandAugment(num_layers=3, prob=0.5, magnitude=5),
             vt.ChannelFirst(),
             t.Resize((224,224)),
-            # NormalizeVideo(
-            #     mean=[0.39449842, 0.4566527, 0.49926605],
-            #     std=[0.18728599, 0.21862774, 0.267905]
-            #     ),
             ])
-
+            
         self.val_transforms = t.Compose([
             vt.FrameSequenceToTensor(),
             t.Resize((224,224))
             ])
 
         if mix_video:
-            video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes)
+            video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes, mixup_alpha=0.8, cutmix_prob=0)
             self.train_collate = collate_function_builder(epsilon, load_frames, video_transform)
         else:
             self.train_collate = collate_function_builder(epsilon, load_frames)
@@ -191,18 +191,18 @@ class LitResampledHblDataset(pl.LightningDataModule):
         match stage:
 
             case "train":
-
+                
                 self.data_train = ResampledHblDataset(
-                    meta_path=Path(self.meta_path) / "meta3d_train.csv",
+                    meta_path=prepare_meta_path(self.meta_path, "train"),
                     idx_to_frame=self.idx_mapping_train,
                     label_mapping=self.label_mapping,
                     load_frames=self.load_frames,
                     seq_len=self.seq_len,
                     sampling_rate=self.sampling_rate,
-                    transforms=self.train_transforms
+                    transforms=self.val_transforms
                 )
                 self.data_val = ResampledHblDataset(
-                    meta_path=Path(self.meta_path) / "meta3d_val.csv",
+                    meta_path=prepare_meta_path(self.meta_path, "val"),
                     idx_to_frame=self.idx_mapping_val,
                     label_mapping=self.label_mapping,
                     load_frames=self.load_frames,
@@ -214,7 +214,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
             case "validate":
 
                 self.data_val = ResampledHblDataset(
-                    meta_path=Path(self.meta_path) / "meta3d_val.csv",
+                    meta_path=prepare_meta_path(self.meta_path, "val"),
                     idx_to_frame=self.idx_mapping_val,
                     label_mapping=self.label_mapping,
                     load_frames=self.load_frames,
@@ -225,7 +225,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
             case "test":
 
                 self.data_test = ResampledHblDataset(
-                    meta_path=Path(self.meta_path) / "meta3d_test.csv",
+                    meta_path=prepare_meta_path(self.meta_path, "test"),
                     idx_to_frame=self.idx_mapping_test,
                     label_mapping=self.label_mapping,
                     load_frames=self.load_frames,
@@ -235,7 +235,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
                 )
 
     def train_dataloader(self):
-        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4, persistent_workers=True, pin_memory=True, shuffle=True, collate_fn=self.train_collate,)
+        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4, persistent_workers=True, pin_memory=True, shuffle=True, collate_fn=self.val_collate,)
 
     def val_dataloader(self):
         return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, collate_fn=self.val_collate)
@@ -283,9 +283,16 @@ def collate_function_builder(epsilon : int, load_frames : bool, mix_video : call
             elif isinstance(first_entry, (int, float, np.int64, np.float64)):
                 # frame_idx, query_idx, label_offset, label, match_number
                 batch[k] = torch.tensor([instance[k] for instance in instances])
-
-        if mix_video:
+        r = torch.rand(1).item()
+        if (not mix_video is None) and r < 0.5:
             batch["frames"], batch["label"] = mix_video(batch["frames"], batch["label"])
         return batch
 
     return multimodal_collate
+
+
+def prepare_meta_path(path : str, split : str):
+    if path.endswith(".csv"):
+        return path
+    else:
+        return Path(path) / f"meta3d_{split}.csv"

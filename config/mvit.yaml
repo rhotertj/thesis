@@ -2,6 +2,7 @@ seed_everything: 43
 stage: train
 logger:
   project: thesis_mvit
+
 trainer: # logger extra
   num_nodes: 1
   devices: 1
@@ -18,27 +19,39 @@ trainer: # logger extra
   accelerator: "gpu"
   precision: 32
   num_sanity_val_steps: 1
-dataset: LitResampledHblDataset
+
 data:
-  meta_path: "/nfs/home/rhotertj/datasets/hbl/"
-  idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta3d_train.jsonl"
-  idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta3d_val.jsonl"
-  idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta3d_test.jsonl"
-  seq_len: 16
-  sampling_rate: 2
-  load_frames: true
-  batch_size: 8
-  epsilon : 7
-  mix_video: True
-model_class : LitMViT
+  name: LitResampledHblDataset
+  params:
+    meta_path: "/nfs/home/rhotertj/datasets/hbl/meta3d.csv"
+    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/time/meta3d_train.jsonl"
+    idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/time/meta3d_val.jsonl"
+    idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/time/meta3d_test.jsonl"
+    seq_len: 16
+    sampling_rate: 2
+    load_frames: true
+    batch_size: 8
+    epsilon : 7
+    mix_video: True
+
 model:
-  pretrained_path: "models/mvit_b_16x4.pt"
-  learning_rate: 0.03
-  momentum: 0.9
-  weight_decay: 1e-4
-  loss_func: unweighted_cross_entropy
+  name: make_kinetics_mvit
+  params:
+    pretrained_path: "models/mvit_b_16x4.pt"
+
+lit_model:
+  name: LitUniModal
+  params:
+    momentum: 0.9
+    learning_rate: 0.03
+    weight_decay: 1e-4
+    loss_func: unweighted_cross_entropy
+
 num_classes: 3
 checkpoint: null
+save_config: true
+log_proportions: true
+
 callbacks:
   checkpointing:
     every_n: 1
@@ -48,5 +61,3 @@ callbacks:
     patience: 3
     mode: max
     check_on_train_epoch_end: True
-save_config: true
-log_proportions: true

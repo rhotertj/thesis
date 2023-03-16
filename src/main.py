@@ -1,6 +1,7 @@
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 import os
 from pathlib import Path
@@ -9,7 +10,9 @@ import pandas as pd
 from omegaconf import OmegaConf as omcon
 import argparse
 
-from lit_models import LitMViT, LitGAT
+from lit_models import LitUniModal
+from video_models import make_kinetics_mvit
+from graph_models import GAT
 from lit_data import LitMultiModalHblDataset, LitResampledHblDataset
 from data.labels import LabelDecoder
 from utils import get_proportions_df
@@ -23,17 +26,21 @@ def main(conf):
         config=conf
     )
     experiment_name = logger.experiment.name
-    conf.model.max_epochs = conf.trainer.max_epochs
+    
 
     label_decoder = LabelDecoder(conf.num_classes)
 
-    model = eval(conf.model_class)(
-        **conf.model,
+    model = eval(conf.model.name)(**conf.model.params, num_classes=conf.num_classes)
+
+    lit_model = eval(conf.lit_model.name)(
+        **conf.lit_model.params,
+        model=model,
+        max_epochs=conf.trainer.max_epochs,
         label_mapping=label_decoder
     )
 
-    lit_data = eval(conf.dataset)(
-        **conf.data,
+    lit_data = eval(conf.data.name)(
+        **conf.data.params,
         label_mapping=label_decoder
     )
     lit_data.setup(conf.stage)
@@ -61,10 +68,15 @@ def main(conf):
     checkpoint_cb = ModelCheckpoint(
         dirpath=exp_dir,
         every_n_epochs=conf.callbacks.checkpointing.every_n,
-
     )
 
     callbacks.append(checkpoint_cb)
+
+    earlystopping_cb = EarlyStopping(
+        **conf.callbacks.early_stopping,
+    )
+
+    callbacks.append(earlystopping_cb)
 
     trainer = pl.Trainer(
         logger=logger,
@@ -77,7 +89,7 @@ def main(conf):
         case "train":
 
             trainer.fit(
-                model,
+                model=lit_model,
                 train_dataloaders=lit_data.train_dataloader(),
                 val_dataloaders=lit_data.val_dataloader(),
                 )
@@ -85,7 +97,7 @@ def main(conf):
         case "validate":
 
             trainer.validate(
-                model=model,
+                model=lit_model,
                 dataloaders=lit_data.val_dataloader(),
                 ckpt_path=conf.checkpoint
             )
@@ -93,7 +105,7 @@ def main(conf):
         case "test":
 
             trainer.test(
-                model=model,
+                model=lit_model,
                 dataloaders=lit_data.test_dataloader(),
                 ckpt_path=conf.checkpoint
             )
