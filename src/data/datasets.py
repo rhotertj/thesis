@@ -294,6 +294,7 @@ class ResampledHblDataset(Dataset):
         self.transforms = transforms
         self.label_mapping = label_mapping
 
+        print("Read", meta_path)
         self.meta_df = pd.read_csv(meta_path)
         self.frame_paths = []
         self.event_dfs = []
@@ -448,8 +449,9 @@ class ResampledHblDataset(Dataset):
             l = self.__getitem__(i)["label"]
             labels[l] += 1
         self.load_frames = old_setting
+        print("Load Frames after proportions", self.load_frames)
         print("Labels", labels)
-        print("VC:", self.idx_to_frame_number.value_counts(["class_coarse"]))
+        print("Value counts:", self.idx_to_frame_number.value_counts(["class_coarse"]))
         return labels
 
     def export_json(self, idx):

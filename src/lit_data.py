@@ -157,7 +157,6 @@ class LitResampledHblDataset(pl.LightningDataModule):
         self.load_frames = load_frames
         self.label_mapping = label_mapping
         self.batch_size = batch_size
-
         self.val_transforms = t.Compose([
             vt.FrameSequenceToTensor(),
             t.Resize((224,224))
@@ -196,7 +195,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
                     load_frames=self.load_frames,
                     seq_len=self.seq_len,
                     sampling_rate=self.sampling_rate,
-                    transforms=self.val_transforms
+                    transforms=self.train_transforms
                 )
                 self.data_val = ResampledHblDataset(
                     meta_path=prepare_meta_path(self.meta_path, "val"),
@@ -232,7 +231,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
                 )
 
     def train_dataloader(self):
-        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4, persistent_workers=True, pin_memory=True, shuffle=True, collate_fn=self.val_collate,)
+        return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4, persistent_workers=True, pin_memory=True, shuffle=True, collate_fn=self.train_collate,)
 
     def val_dataloader(self):
         return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, collate_fn=self.val_collate)

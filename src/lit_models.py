@@ -51,30 +51,28 @@ class LitUniModal(pl.LightningModule):
         self.train_loss = []
 
     def forward(self, input):
-        # TODO Pass x wrt model class
         if isinstance(self.model, pytorchvideo.models.vision_transformers.MultiscaleVisionTransformers):
             x = input["frames"]
+            return self.model(x)
         else:
-            x = input["positions"]
-        return self.model(x)
+            positions = input["positions"]
+            return self.model(positions, positions.ndata["positions"])
 
     def training_step(self, batch, batch_idx):
-        # print("Enter step")
         targets = batch["label"]
         offsets = batch["label_offset"]
         y = self.forward(batch)
 
-        loss = self.loss(y, targets)
-        # loss = self.loss(y, targets, offsets)
+        # loss = self.loss(y, targets)
+        loss = self.loss(y, targets, offsets)
         self.log("train/batch_loss", loss)
         self.train_loss.append(loss.detach().cpu().item())
 
-        # if targets.ndim == 2:
-        #     targets = targets.argmax(-1)
+        if targets.ndim == 2:
+            targets = targets.argmax(-1)
 
         self.train_accuracy.update(y, targets)
         self.log("train/batch_acc", torch.mean((targets == y.argmax(-1)).to(torch.float32)))
-        # print("Exit step")
         return loss
 
     def on_train_epoch_start(self):
@@ -101,8 +99,8 @@ class LitUniModal(pl.LightningModule):
         targets = batch["label"]
         offsets = batch["label_offset"]
         y = self.forward(batch)
-        loss = self.loss(y, targets)
-        #loss = self.loss(y, targets, offsets)
+        # loss = self.loss(y, targets)
+        loss = self.loss(y, targets, offsets)
         self.log("val/batch_loss", loss.mean())
 
         self.val_accuracy.update(y, targets)

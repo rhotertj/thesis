@@ -1,4 +1,4 @@
-from data import MultiModalHblDataset
+from data.datasets import MultiModalHblDataset
 from video_models import make_kinetics_mvit
 from utils import array2gif, has_action
 from torchvision import transforms
