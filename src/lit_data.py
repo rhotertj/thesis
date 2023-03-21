@@ -31,7 +31,8 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
         load_frames : bool = True,
         batch_size : int = 1,
         epsilon : int = 7,
-        mix_video : bool = True
+        mix_video : bool = True,
+        video_transforms : t.Compose = None
         ) -> None:
 
         super().__init__()
@@ -45,21 +46,13 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
         self.load_frames = load_frames
         self.label_mapping = label_mapping
         self.batch_size = batch_size
-        self.train_transforms = t.Compose([
-            vt.FrameSequenceToTensor(),
-            vt.RandomHorizontalFlipVideo(p=0.5),
-            vt.TimeFirst(),
-            t.ColorJitter(brightness=0.2, hue=.2, contrast=0.2, saturation=0.2),
-            ptvt.RandAugment(num_layers=3, prob=0.5, magnitude=5),
-            vt.ChannelFirst(),
-            t.Resize((224,224)),
-            ])
-            
-
         self.val_transforms = t.Compose([
             vt.FrameSequenceToTensor(),
             t.Resize((224,224))
             ])
+
+        self.train_transforms = video_transforms if video_transforms else self.val_transforms
+
 
         if mix_video:
             video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes, mixup_alpha=0.8)
@@ -149,7 +142,8 @@ class LitResampledHblDataset(pl.LightningDataModule):
         load_frames : bool = True,
         batch_size : int = 1,
         epsilon : int = 7,
-        mix_video : bool = True
+        mix_video : bool = True,
+        video_transforms : t.Compose = None
         ) -> None:
         super().__init__()
 
@@ -163,20 +157,23 @@ class LitResampledHblDataset(pl.LightningDataModule):
         self.load_frames = load_frames
         self.label_mapping = label_mapping
         self.batch_size = batch_size
-        self.train_transforms = t.Compose([
-            vt.FrameSequenceToTensor(),
-            vt.RandomHorizontalFlipVideo(p=0.5),
-            vt.TimeFirst(),
-            t.ColorJitter(brightness=0.2, hue=.2, contrast=0.2, saturation=0.2),
-            # ptvt.RandAugment(num_layers=3, prob=0.5, magnitude=5),
-            vt.ChannelFirst(),
-            t.Resize((224,224)),
-            ])
-            
+
         self.val_transforms = t.Compose([
             vt.FrameSequenceToTensor(),
             t.Resize((224,224))
             ])
+
+        self.train_transforms = video_transforms if video_transforms else self.val_transforms
+        # t.Compose([
+        #     vt.FrameSequenceToTensor(),
+        #     vt.RandomHorizontalFlipVideo(p=0.5),
+        #     vt.TimeFirst(),
+        #     t.ColorJitter(brightness=0.2, hue=.2, contrast=0.2, saturation=0.2),
+        #     # ptvt.RandAugment(num_layers=3, prob=0.5, magnitude=5),
+        #     vt.ChannelFirst(),
+        #     t.Resize((224,224)),
+        #     ])
+            
 
         if mix_video:
             video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes, mixup_alpha=0.8, cutmix_prob=0)

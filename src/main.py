@@ -1,4 +1,6 @@
-import torch
+from torchvision import transforms as t
+import video_transforms as vt
+import pytorchvideo.transforms as ptvt
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -39,8 +41,22 @@ def main(conf):
         label_mapping=label_decoder
     )
 
+    if conf.data.transforms:
+        video_transforms = []
+        for transform in conf.data.transforms:
+            if transform.get("params", False):
+                trans = eval(transform.name)(**transform.params)
+            else:
+                trans = eval(transform.name)()
+
+            video_transforms.append(trans)
+        video_transforms = t.Compose(video_transforms)
+    else:
+        video_transforms = None
+
     lit_data = eval(conf.data.name)(
         **conf.data.params,
+        video_transforms=video_transforms,
         label_mapping=label_decoder
     )
     lit_data.setup(conf.stage)
