@@ -12,9 +12,11 @@ import pandas as pd
 from omegaconf import OmegaConf as omcon
 import argparse
 
-from lit_models import LitUniModal
+# keep "unused" imports to use in configs
+from lit_models import LitModel
 from video_models import make_kinetics_mvit
 from graph_models import GAT
+from multimodal_models import MultiModalModel
 from lit_data import LitMultiModalHblDataset, LitResampledHblDataset
 from data.labels import LabelDecoder
 from utils import get_proportions_df

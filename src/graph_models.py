@@ -18,7 +18,8 @@ class GAT(torch.nn.Module):
         num_classes: int,
         input_embedding: bool,
         readout: str = "mean",
-        heads: int = 8,
+        num_heads: int = 8,
+        use_head: bool = True,
     ):
         """A simple Graph Attention Model.
 
@@ -31,17 +32,19 @@ class GAT(torch.nn.Module):
             heads (int, optional): Number of attention heads. Defaults to 8.
         """    	
         super().__init__()
+        self.use_head = use_head
+
         if input_embedding:
             self.input_layer = torch.nn.Linear(dim_in, dim_h)
             dim_in = dim_h
         else:
             self.input_layer = torch.nn.Identity()
-        self.gat1 = GATv2Conv(dim_in, dim_h, num_heads=heads, feat_drop=0.4)
-        self.gat2 = GATv2Conv(dim_h, dim_h, num_heads=heads)
+        self.gat1 = GATv2Conv(dim_in, dim_h, num_heads=num_heads, feat_drop=0.4)
+        self.gat2 = GATv2Conv(dim_h, dim_h, num_heads=num_heads)
         self.readout = readout
         self.relu = torch.nn.ReLU()
-
         self.head = create_default_head(input_dim=dim_h, output_dim=num_classes, activation=self.relu, dropout=0.3)
+        
 
     def forward(self, g, g_feats):
         # graph attention
@@ -56,8 +59,9 @@ class GAT(torch.nn.Module):
         g.ndata["h"] = h
         h = dgl.readout_nodes(g, "h", op=self.readout)
         # classify graph representation
-        h = self.head(h)
-        h = h.softmax(-1)
+        if self.use_head:
+            h = self.head(h)
+            h = h.softmax(-1)
         return h
 
 

@@ -41,7 +41,7 @@ def create_default_head(
             x = self.dropout(x)
             x = self.fc1(x)
             x = self.activation(x)
-            return self.fc2(x)
+            return self.fc2(x).softmax(-1)
 
     return Head(
         input_dim,

@@ -1,18 +1,18 @@
 seed_everything: 43
 stage: train
 logger:
-  project: thesis_mvit
+  project: thesis_multimodal
 
-trainer: # logger extra
+trainer: 
   num_nodes: 1
   devices: 1
-  overfit_batches: false # change int of n batches to debug with n batches
+  overfit_batches: false
   check_val_every_n_epoch: 1
-  accumulate_grad_batches: 4
-  max_epochs: 30
+  accumulate_grad_batches: 2
+  max_epochs: 50
   max_steps: -1
   max_time: null
-  limit_train_batches: null # set fraction of training data
+  limit_train_batches: null
   limit_val_batches: null
   limit_test_batches: null
   log_every_n_steps: 50
@@ -30,10 +30,10 @@ data:
     seq_len: 16
     sampling_rate: 2
     load_frames: true
-    batch_size: 8
+    batch_size: 16
     epsilon : 7
-    mix_video: True
-  transforms: 
+    mix_video: true
+  transforms:
     - name: vt.FrameSequenceToTensor
     - name: vt.RandomHorizontalFlipVideo
       params:
@@ -56,18 +56,26 @@ data:
         size: [224, 224]
 
 model:
-  name: make_kinetics_mvit
+  name: MultiModalModel
   params:
-    pretrained_path: "models/mvit_b_16x4.pt"
-    head_type: "classify"
+    video_model_name: make_kinetics_mvit
+    video_model_params:
+      pretrained_path: models/mvit_b_16x4.pt
+    graph_model_name: GAT
+    graph_model_params:
+      dim_in: 49
+      dim_h: 128
+      readout: "mean"
+      input_embedding: true
+      num_heads: 8
 
 lit_model:
   name: LitModel
   params:
     momentum: 0.9
-    learning_rate: 0.03
+    learning_rate: 0.05
     weight_decay: 1e-4
-    loss_func: unweighted_cross_entropy
+    loss_func: weighted_cross_entropy
 
 num_classes: 3
 checkpoint: null
@@ -77,9 +85,9 @@ log_proportions: true
 callbacks:
   checkpointing:
     every_n: 1
-    dir: experiments/mvit/train
+    dir: experiments/multimodal/train
   early_stopping:
     monitor: "train/acc"
-    patience: 3
+    patience: 7
     mode: max
     check_on_train_epoch_end: True

@@ -42,10 +42,11 @@ model:
     dim_h: 128
     readout: "mean"
     input_embedding: true
-    heads: 8
+    num_heads: 8
+    use_head: true
 
 lit_model:
-  name: LitUniModal
+  name: LitModel
   params:
     momentum: 0.9
     learning_rate: 0.05
