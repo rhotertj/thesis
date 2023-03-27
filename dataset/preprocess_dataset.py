@@ -18,7 +18,8 @@ import json
 import pickle as pkl
 from tqdm import tqdm
 import scipy
-
+from dataclasses import dataclass
+from typing import Union
 import sync
 from kinexon_reader import read_kinexon_file
 
@@ -30,6 +31,24 @@ FRAMES_PATH = Path("/data/hbl_rawframes/")
 VIDEO_PATH = Path("/nfs/home/rhotertj/datasets/hbl/videos")
 META_PATH = Path("/nfs/home/rhotertj/datasets/hbl/")
 
+@dataclass
+class SyncInformation:
+    match_id_min: Union[str, int] # SportRadar match_id without "sr:sport_event:"
+    raw_pos_knx: str  # kinexon pos filename
+    raw_video: str  # video filename
+    v_h1_start: float  # t_v [s]
+    v_h1_end: float  # t_v [s]
+    v_h2_start: float  # t_v [s]
+    v_h2_end: float  # t_v [s]
+    p_h1: float  # t_v [s]
+    p_h2: float  # t_v [s]
+    duration: float  # t_v [s]
+    avg_frame_rate: float  # average frame rate video
+    avg_frame_rate_pos: float  # average frame rate position data
+    t_null: float  # [ms] event timestamp (local time) of first recorded position data
+    mirror_horizontal : bool
+    mirror_vertical: bool
+    split: str
 
 def copy_and_rename_videos(meta_df):
     for event_id, row in meta_df.iterrows():
@@ -45,8 +64,21 @@ def read_all_matches_meta():
     df_matches = pd.read_csv(DATA_SOURCE / "raw_mapping.csv", index_col=index_col, usecols=usecols)
 
     # offsets necessary for sync
-    usecols = [index_col, "v_h1_start", "v_h1_end", "v_h2_start", "v_h2_end", "p_h1", "p_h2"]
-    df_anno = pd.read_csv(DATA_SOURCE / "raw_base_annotations.csv", index_col=index_col, usecols=usecols)
+    usecols = [
+        index_col,
+        "v_h1_start",
+        "v_h1_end",
+        "v_h2_start",
+        "v_h2_end",
+        "p_h1",
+        "p_h2",
+        "mirror_horizontal",
+        "mirror_vertical",
+        "split"
+    ]
+    # df_anno = pd.read_csv(DATA_SOURCE / "raw_base_annotations.csv", index_col=index_col, usecols=usecols)
+    df_anno = pd.read_csv("/nfs/home/rhotertj/datasets/hbl/raw_base_annotations.csv", index_col=index_col, usecols=usecols)
+
     df = df_matches.join(df_anno)
     df = df.dropna(axis=0, subset=["v_h1_start", "p_h1"])
 
@@ -152,7 +184,7 @@ def main():
 
     for match_number in tqdm(range(len(meta_df))):
         # Prepare meta info for selected match
-        meta_info = sync.SyncInformation(
+        meta_info = SyncInformation(
             **{
                 **meta_df.iloc[match_number].to_dict(),
                 "match_id_min":
@@ -161,7 +193,6 @@ def main():
             avg_frame_rate_pos=None,
             t_null=None,
         )
-
         # Read position data (frame rate != video frame rate) and resample positions to video frame rate
         # Then, align position data such that each frame matches one position
         # print("Reading info for", meta_info.match_id_min)
@@ -179,24 +210,25 @@ def main():
         pos_available = sync.pos_available(pos_sets[0], pos_sets[1], value_check="zeros")
         pos_sets.append(pos_available)
 
-        vertical = [1, 2, 5, 6, 8, 10]
-        horizontal = [1, 2, 5, 6, 8, 10]
+        # legacy from time where only 10 matches were available
+        # vertical = [1, 2, 5, 6, 8, 10]
+        # horizontal = [1, 2, 5, 6, 8, 10]
 
-        new_meta_df.loc[meta_df.index[match_number], "mirror_vertical"] = match_number in vertical
-        new_meta_df.loc[meta_df.index[match_number], "mirror_horizontal"] = match_number in horizontal
+        # new_meta_df.loc[meta_df.index[match_number], "mirror_vertical"] = match_number in vertical
+        # new_meta_df.loc[meta_df.index[match_number], "mirror_horizontal"] = match_number in horizontal
 
-        train = [0, 1, 3, 6, 9, 10]
-        val = [2, 7]
-        test = [8, 4]
+        # train = [0, 1, 3, 6, 9, 10]
+        # val = [2, 7]
+        # test = [8, 4]
 
-        if match_number in train:
-            stage = "train"
-        elif match_number in val:
-            stage = "val"
-        elif match_number in test:
-            stage = "test"
+        # if match_number in train:
+        #     stage = "train"
+        # elif match_number in val:
+        #     stage = "val"
+        # elif match_number in test:
+        #     stage = "test"
 
-        new_meta_df.loc[meta_df.index[match_number], "stage"] = stage
+        # new_meta_df.loc[meta_df.index[match_number], "stage"] = stage
 
         event_file = match_id2event_json[f"sr:sport_event:{meta_info.match_id_min}"]
         # print("Read", DATA_SOURCE / "events_its" / event_file)
@@ -213,9 +245,9 @@ def main():
 
         new_meta_df.loc[meta_df.index[match_number], "frames_path"] = FRAMES_PATH / f"{meta_info.match_id_min}.mp4.d"
 
-    new_meta_df.to_csv(META_PATH / "meta3d.csv")
-    for stage in ["train", "val", "test"]:
-        new_meta_df[new_meta_df.stage == stage].to_csv(META_PATH / f"meta3d_{stage}.csv")
+    new_meta_df.to_csv(META_PATH / "meta30.csv")
+    for split in ["train", "val", "test"]:
+        new_meta_df[new_meta_df.split == split].to_csv(META_PATH / f"meta30_{split}.csv")
     print(new_meta_df)
 
 
