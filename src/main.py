@@ -55,6 +55,7 @@ def main(conf):
         video_transforms = t.Compose(video_transforms)
     else:
         video_transforms = None
+    print("Transforms:", video_transforms)
 
     lit_data = eval(conf.data.name)(
         **conf.data.params,

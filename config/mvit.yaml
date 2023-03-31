@@ -23,10 +23,10 @@ trainer: # logger extra
 data:
   name: LitResampledHblDataset
   params:
-    meta_path: "/nfs/home/rhotertj/datasets/hbl/meta3d.csv"
-    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/time/meta3d_train.jsonl"
-    idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/time/meta3d_val.jsonl"
-    idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/time/meta3d_test.jsonl"
+    meta_path: "/nfs/home/rhotertj/datasets/hbl/"
+    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta30_train.jsonl"
+    idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta30_val.jsonl"
+    idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta30_test.jsonl"
     seq_len: 16
     sampling_rate: 2
     load_frames: true
@@ -65,7 +65,7 @@ lit_model:
   name: LitModel
   params:
     momentum: 0.9
-    learning_rate: 0.03
+    learning_rate: 0.01
     weight_decay: 1e-4
     loss_func: unweighted_cross_entropy
 
@@ -79,7 +79,7 @@ callbacks:
     every_n: 1
     dir: experiments/mvit/train
   early_stopping:
-    monitor: "train/acc"
+    monitor: "val/acc"
     patience: 3
     mode: max
     check_on_train_epoch_end: True

@@ -77,7 +77,7 @@ def read_all_matches_meta():
         "split"
     ]
     # df_anno = pd.read_csv(DATA_SOURCE / "raw_base_annotations.csv", index_col=index_col, usecols=usecols)
-    df_anno = pd.read_csv("/nfs/home/rhotertj/datasets/hbl/raw_base_annotations.csv", index_col=index_col, usecols=usecols)
+    df_anno = pd.read_csv("/nfs/home/rhotertj/datasets/hbl/raw_base_annotations_split.csv", index_col=index_col, usecols=usecols)
 
     df = df_matches.join(df_anno)
     df = df.dropna(axis=0, subset=["v_h1_start", "p_h1"])
@@ -246,7 +246,7 @@ def main():
         new_meta_df.loc[meta_df.index[match_number], "frames_path"] = FRAMES_PATH / f"{meta_info.match_id_min}.mp4.d"
 
     new_meta_df.to_csv(META_PATH / "meta30.csv")
-    for split in ["train", "val", "test"]:
+    for split in ["train", "valid", "test"]:
         new_meta_df[new_meta_df.split == split].to_csv(META_PATH / f"meta30_{split}.csv")
     print(new_meta_df)
 

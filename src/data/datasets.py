@@ -282,7 +282,7 @@ class ResampledHblDataset(Dataset):
                 corresponding to seq_len. Defaults to 1.
             load_frames (bool, optional): Whether to read and process images. Defaults to True.
             transforms (Union[None, Compose], optional): Transforms to apply to the video frames. Defaults to None.
-            label_mapping (callable optional): A function that maps the label dictionary to an integer. 
+            label_mapping (callable, optional): A function that maps the label dictionary to an integer. 
                 Defaults to the identity function.
         """
         super().__init__()

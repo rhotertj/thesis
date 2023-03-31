@@ -162,17 +162,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
             t.Resize((224,224))
             ])
 
-        self.train_transforms = video_transforms if video_transforms else self.val_transforms
-        # t.Compose([
-        #     vt.FrameSequenceToTensor(),
-        #     vt.RandomHorizontalFlipVideo(p=0.5),
-        #     vt.TimeFirst(),
-        #     t.ColorJitter(brightness=0.2, hue=.2, contrast=0.2, saturation=0.2),
-        #     # ptvt.RandAugment(num_layers=3, prob=0.5, magnitude=5),
-        #     vt.ChannelFirst(),
-        #     t.Resize((224,224)),
-        #     ])
-            
+        self.train_transforms = video_transforms if video_transforms else self.val_transforms           
 
         if mix_video:
             video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes, mixup_alpha=0.8, cutmix_prob=0)
@@ -198,7 +188,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
                     transforms=self.train_transforms
                 )
                 self.data_val = ResampledHblDataset(
-                    meta_path=prepare_meta_path(self.meta_path, "val"),
+                    meta_path=prepare_meta_path(self.meta_path, "valid"),
                     idx_to_frame=self.idx_mapping_val,
                     label_mapping=self.label_mapping,
                     load_frames=self.load_frames,
@@ -210,7 +200,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
             case "validate":
 
                 self.data_val = ResampledHblDataset(
-                    meta_path=prepare_meta_path(self.meta_path, "val"),
+                    meta_path=prepare_meta_path(self.meta_path, "valid"),
                     idx_to_frame=self.idx_mapping_val,
                     label_mapping=self.label_mapping,
                     load_frames=self.load_frames,
@@ -291,4 +281,4 @@ def prepare_meta_path(path : str, split : str):
     if path.endswith(".csv"):
         return path
     else:
-        return Path(path) / f"meta3d_{split}.csv"
+        return Path(path) / f"meta30_{split}.csv"

@@ -13,6 +13,7 @@ sys.path.append("/nfs/home/rhotertj/Code/thesis/src")
 from utils import generate_class_description_fine, generate_class_description_coarse
 from data.datasets import MultiModalHblDataset, ResampledHblDataset
 
+META_FILE = "meta30"
 
 def create_dataframe_from_dataset(dataset: Dataset, path: str = None) -> pd.DataFrame:
     """Creates a `pd.DataFrame` that contains information about frame number, match and label per instance.
@@ -25,6 +26,7 @@ def create_dataframe_from_dataset(dataset: Dataset, path: str = None) -> pd.Data
         pd.DataFrame: Dataset DataFrame.
     """
     data_dict = []
+    print("Creating dataframe from dataset...")
     for idx in tqdm(range(len(dataset))):
         instance = dataset[idx]
         label = instance["label"]
@@ -50,6 +52,7 @@ def create_dataframe_from_dataset(dataset: Dataset, path: str = None) -> pd.Data
     if path:
         print("Save dataset to", path)
         df.to_json(path, lines=True, orient="records")
+    print("Returning dataset of length", len(df))
     return df
 
 
@@ -101,21 +104,21 @@ def load_split_matches_df(data_path: Path, sequence_length: int, sampling_rate: 
     dfs = []
     for _overlap in overlaps:
         trainset = MultiModalHblDataset(
-            meta_path=data_path / "meta3d_train.csv",
+            meta_path=data_path / f"{META_FILE}_train.csv",
             seq_len=sequence_length,
             sampling_rate=sampling_rate,
             load_frames=False,
             overlap=_overlap
         )
         valset = MultiModalHblDataset(
-            meta_path=data_path / "meta3d_val.csv",
+            meta_path=data_path / f"{META_FILE}_valid.csv",
             seq_len=sequence_length,
             sampling_rate=sampling_rate,
             load_frames=False,
             overlap=_overlap
         )
         testset = MultiModalHblDataset(
-            meta_path=data_path / "meta3d_test.csv",
+            meta_path=data_path / f"{META_FILE}_test.csv",
             seq_len=sequence_length,
             sampling_rate=sampling_rate,
             load_frames=False,
@@ -180,6 +183,10 @@ if "__main__" == __name__:
         exist_ok=True
     )
 
+    # Splitting by matches:
+    #   Load meta_split.csv for all splits
+    #   Balance each split separately
+    #   Save splits separately
     if args.mode == 'matches':
         split_match_dfs = load_split_matches_df(
             args.data_path, args.sequence_length, args.sampling_rate, args.overlap, args.balanced
@@ -196,11 +203,14 @@ if "__main__" == __name__:
                 splits[split] = df
 
         for split, df in splits.items():
-            fname = fpath / f"meta3d_{split}.jsonl"
+            fname = fpath / f"{META_FILE}_{split}.jsonl"
             print(df.value_counts(["class_coarse"]))
             print("Writing to", fname)
             df.to_json(fname, lines=True, orient="records")
 
+    # Splitting by time or random:
+    #   Load complete dataset
+    #   Split either randomly or along dataset by size ('time')
     if args.mode in ('time', 'random'):
         overlaps = [args.overlap]
         if args.balanced:
@@ -209,7 +219,7 @@ if "__main__" == __name__:
         dfs = []
         for _overlap in overlaps:
             dataset = MultiModalHblDataset(
-                meta_path=args.data_path / "meta3d.csv",
+                meta_path=args.data_path / f"{META_FILE}.csv",
                 seq_len=args.sequence_length,
                 sampling_rate=args.sampling_rate,
                 load_frames=False,
@@ -230,7 +240,7 @@ if "__main__" == __name__:
             train_idx, val_idx, test_idx = random_split_dataframe(dfs[0], args.val_size, args.test_size)
 
         for split, idx in zip(["train", "val", "test"], [train_idx, val_idx, test_idx]):
-            fname = fpath / f"meta3d_{split}.jsonl"
+            fname = fpath / f"{META_FILE}_{split}.jsonl"
             split_df = dfs[0].iloc[idx]
             split_df.reset_index(inplace=True, drop=True)
             print(df.value_counts(["class_coarse"]))
