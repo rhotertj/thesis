@@ -184,8 +184,8 @@ def create_graph(positions : torch.Tensor, epsilon : float):
             G = dgl.add_edges(G, [a1, a2], [a2, a1])
 
     # normalize positions h w
-    positions[:, 1::2] /= 40  # court length
-    positions[:, 2::2] /= 20  # court length
+    positions[:, 1::3] /= 40  # court length
+    positions[:, 2::3] /= 20  # court length
     G.ndata["positions"] = positions
 
     G = dgl.add_self_loop(G)
