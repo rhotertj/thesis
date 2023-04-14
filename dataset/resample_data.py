@@ -133,7 +133,7 @@ def load_split_matches_df(data_path: Path, sequence_length: int, sampling_rate: 
     return dfs
 
 
-def balance_classes(overlap_df: pd.DataFrame, chunk_df: pd.DataFrame, background_size: float = 0.6) -> pd.DataFrame:
+def balance_classes(overlap_df: pd.DataFrame, chunk_df: pd.DataFrame, background_size: float) -> pd.DataFrame:
     overlapped_shots = overlap_df[overlap_df.class_coarse == "Shot"]
     overlapped_passes = overlap_df[overlap_df.class_coarse == "Pass"].iloc[:len(overlapped_shots)]
     n_sp = len(overlapped_passes) + len(overlapped_shots)
@@ -168,6 +168,7 @@ if "__main__" == __name__:
     parser.add_argument('-r', '--sampling_rate', type=int, help="Sampling rate.")
 
     args = parser.parse_args()
+    print(args)
 
     if args.mode == "random" and (args.overlap == True or args.balanced == True):
         print(
@@ -230,7 +231,7 @@ if "__main__" == __name__:
 
         if args.balanced:
             overlap_df, chunk_df = dfs
-            balanced_df = balance_classes(overlap_df, chunk_df)
+            balanced_df = balance_classes(overlap_df, chunk_df, args.background_size)
             dfs = [balanced_df]
 
         if args.mode == "time":
@@ -243,6 +244,6 @@ if "__main__" == __name__:
             fname = fpath / f"{META_FILE}_{split}.jsonl"
             split_df = dfs[0].iloc[idx]
             split_df.reset_index(inplace=True, drop=True)
-            print(df.value_counts(["class_coarse"]))
+            print(split_df.value_counts(["class_coarse"]))
             print("Writing to", fname)
             split_df.to_json(fname, lines=True, orient="records")
