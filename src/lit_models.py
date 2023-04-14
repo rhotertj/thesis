@@ -10,7 +10,7 @@ import itertools
 
 from utils import draw_trajectory, plot_confmat
 from video_models import make_kinetics_mvit
-from graph_models import GAT
+from graph_models import GAT, PositionTransformer
 from multimodal_models import MultiModalModel
 
 from data.labels import LabelDecoder
@@ -19,11 +19,9 @@ class LitModel(pl.LightningModule):
 
     def __init__(
         self,
-        learning_rate: float,
         label_mapping: LabelDecoder,
-        momentum: float,
-        weight_decay: float,
-        max_epochs: int,
+        scheduler: callable,
+        optimizer: callable,
         loss_func : callable,
         model : torch.nn.Module
     ) -> None:
@@ -33,11 +31,9 @@ class LitModel(pl.LightningModule):
 
         wandb.watch(self.model)
 
-        self.lr = learning_rate
-        self.loss = eval(loss_func)
-        self.momentum = momentum
-        self.weight_decay = weight_decay
-        self.max_epochs = max_epochs
+        self.loss_func = loss_func
+        self.scheduler = scheduler
+        self.optimizer = optimizer
         self.class_names = label_mapping.class_names
 
 
@@ -58,6 +54,10 @@ class LitModel(pl.LightningModule):
         elif isinstance(self.model, GAT):
             positions = input["positions"]
             return self.model(positions, positions.ndata["positions"])
+        elif isinstance(self.model, PositionTransformer):
+            positions = input["positions"].ndata["positions"]
+            positions = positions.reshape(-1, 15, 49)
+            return self.model(positions)
         elif isinstance(self.model, MultiModalModel):
             return self.model(input)
 
@@ -67,7 +67,7 @@ class LitModel(pl.LightningModule):
         y = self.forward(batch)
 
         # loss = self.loss(y, targets)
-        loss = self.loss(y, targets, offsets)
+        loss = self.loss_func(y, targets, offsets)
         self.log("train/batch_loss", loss)
         self.train_loss.append(loss.detach().cpu().item())
 
@@ -103,7 +103,7 @@ class LitModel(pl.LightningModule):
         offsets = batch["label_offset"]
         y = self.forward(batch)
         # loss = self.loss(y, targets)
-        loss = self.loss(y, targets, offsets)
+        loss = self.loss_func(y, targets, offsets)
         self.log("val/batch_loss", loss.mean())
 
         self.val_accuracy.update(y, targets)
@@ -144,18 +144,9 @@ class LitModel(pl.LightningModule):
         wandb.log({"val/prec_rec": pr})
 
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(
-            self.parameters(),
-            lr=(self.lr or self.learning_rate),
-            momentum=self.momentum,
-            weight_decay=self.weight_decay,
-        )
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            self.max_epochs,
-            last_epoch=-1,
-        )
-        return [optimizer], [scheduler]
+        if self.scheduler is None:
+            return self.optimizer
+        return [self.optimizer], [self.scheduler]
 
 def unweighted_cross_entropy(batch_y : torch.Tensor, batch_gt : torch.Tensor, batch_label_offsets : torch.Tensor = None):
     """Computes the cross entropy loss across a batch.

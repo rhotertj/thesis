@@ -69,13 +69,21 @@ model:
       input_embedding: true
       num_heads: 8
 
+
 lit_model:
   name: LitModel
+
+loss_func: unweighted_cross_entropy
+
+optimizer:
+  name: SGD
   params:
+    lr: 0.003
     momentum: 0.9
-    learning_rate: 0.05
     weight_decay: 1e-4
-    loss_func: weighted_cross_entropy
+
+scheduler:
+  name: CosineAnnealingLR
 
 num_classes: 3
 checkpoint: null

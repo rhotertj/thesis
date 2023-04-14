@@ -2,7 +2,7 @@ import torch
 from pytorchvideo.models.vision_transformers import create_multiscale_vision_transformers
 from pytorchvideo.models.head import create_vit_basic_head, SequencePool
 
-def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str):
+def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str, batch_size : int):
     spatial_size = 224
     temporal_size = 16
     embed_dim_mul = [[1, 2.0], [3, 2.0], [14, 2.0]]

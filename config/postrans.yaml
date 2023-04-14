@@ -1,19 +1,19 @@
 seed_everything: 43
 stage: train
 logger:
-  project: thesis_mvit
+  project: thesis_gat
 
 trainer: # logger extra
   num_nodes: 1
   devices: 1
   overfit_batches: false # change int of n batches to debug with n batches
   check_val_every_n_epoch: 1
-  accumulate_grad_batches: 4
-  max_epochs: 30
+  accumulate_grad_batches: 1
+  max_epochs: 50
   max_steps: -1
   max_time: null
-  limit_train_batches: null # set fraction of training data
-  limit_val_batches: null
+  limit_train_batches: 0.05 # set fraction of training data
+  limit_val_batches: 0.05
   limit_test_batches: null
   log_every_n_steps: 50
   accelerator: "gpu"
@@ -29,37 +29,21 @@ data:
     idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta30_test.jsonl"
     seq_len: 16
     sampling_rate: 2
-    load_frames: true
-    batch_size: 8
+    load_frames: false
+    batch_size: 16
     epsilon : 7
-    mix_video: True
-  transforms: 
-    - name: vt.FrameSequenceToTensor
-    - name: vt.RandomHorizontalFlipVideo
-      params:
-        p: 0.5
-    - name: vt.TimeFirst
-    - name: t.ColorJitter
-      params:
-        brightness: 0.2
-        hue: 0.2
-        contrast: 0.2
-        saturation: 0.2
-    # - name: ptvt.RandAugment
-    #   params:
-    #     num_layers: 3
-    #     prob: 0.5
-    #     magnitude: 5
-    - name: vt.ChannelFirst
-    - name: t.Resize
-      params:
-        size: [224, 224]
+    mix_video: false
+  transforms: null
 
 model:
-  name: make_kinetics_mvit
+  name: PositionTransformer
   params:
-    pretrained_path: "models/mvit_b_16x4.pt"
-    head_type: "classify"
+    dim_in: 49
+    dim_h: 256
+    #input_operation: "raw" TODO
+    num_heads: 8
+    use_head: true
+
 
 lit_model:
   name: LitModel
@@ -84,9 +68,9 @@ log_proportions: true
 callbacks:
   checkpointing:
     every_n: 1
-    dir: experiments/mvit/train
+    dir: experiments/gat/train
   early_stopping:
-    monitor: "val/acc"
-    patience: 3
-    mode: max
+    monitor: "train/epoch_loss"
+    patience: 7
+    mode: min
     check_on_train_epoch_end: True

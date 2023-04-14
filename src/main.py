@@ -1,21 +1,25 @@
-from torchvision import transforms as t
-import video_transforms as vt
-import pytorchvideo.transforms as ptvt
+import os
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from omegaconf import OmegaConf as omcon
+import argparse
+
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
-import os
-from pathlib import Path
-import numpy as np
-import pandas as pd
-from omegaconf import OmegaConf as omcon
-import argparse
 
-# keep "unused" imports to use in configs
-from lit_models import LitModel
+from torch.optim import SGD, Adam
+from torch.optim.lr_scheduler import CosineAnnealingLR
+
+from torchvision import transforms as t
+import video_transforms as vt
+import pytorchvideo.transforms as ptvt
+
+from lit_models import LitModel, weighted_cross_entropy, unweighted_cross_entropy
 from video_models import make_kinetics_mvit
-from graph_models import GAT
+from graph_models import GAT, PositionTransformer
 from multimodal_models import MultiModalModel
 from lit_data import LitMultiModalHblDataset, LitResampledHblDataset
 from data.labels import LabelDecoder
@@ -34,12 +38,21 @@ def main(conf):
 
     label_decoder = LabelDecoder(conf.num_classes)
 
-    model = eval(conf.model.name)(**conf.model.params, num_classes=conf.num_classes)
+    model = eval(conf.model.name)(**conf.model.params, num_classes=conf.num_classes, batch_size=conf.data.params.batch_size)
 
-    lit_model = eval(conf.lit_model.name)(
-        **conf.lit_model.params,
+    optimizer = eval(conf.optimizer.name)(**conf.optimizer.params, params=model.parameters())
+    if not conf.scheduler is None:
+        scheduler = eval(conf.scheduler.name)(T_max=conf.trainer.max_epochs, optimizer=optimizer, last_epoch=-1)
+    else:
+        scheduler = None
+
+    loss_func = eval(conf.loss_func)
+
+    lit_model = LitModel(
+        optimizer=optimizer,
+        scheduler=scheduler,
+        loss_func=loss_func,
         model=model,
-        max_epochs=conf.trainer.max_epochs,
         label_mapping=label_decoder
     )
 
