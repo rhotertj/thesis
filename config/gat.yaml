@@ -33,6 +33,7 @@ data:
     batch_size: 16
     epsilon : 7
     mix_video: false
+    position_format: graph_per_sequence
   transforms: null
 
 model:
@@ -48,15 +49,25 @@ model:
 lit_model:
   name: LitModel
 
-loss_func: unweighted_cross_entropy
+loss_func: weighted_cross_entropy
 
+# optimizer:
+#   name: Adam
+#   params:
+#     lr: 0.005
+#     weight_decay: 0.0005
+
+# scheduler: null
 optimizer:
-  name: Adam
+  name: SGD
   params:
-    lr: 0.005
-    weight_decay: 0.0005
+    lr: 0.003
+    momentum: 0.9
+    weight_decay: 1e-4
 
-scheduler: null
+scheduler:
+  name: CosineAnnealingLR
+
 
 
 num_classes: 3

@@ -9,11 +9,11 @@ trainer: # logger extra
   overfit_batches: false # change int of n batches to debug with n batches
   check_val_every_n_epoch: 1
   accumulate_grad_batches: 1
-  max_epochs: 50
+  max_epochs: 100
   max_steps: -1
   max_time: null
-  limit_train_batches: 0.05 # set fraction of training data
-  limit_val_batches: 0.05
+  limit_train_batches: 0.5 # set fraction of training data
+  limit_val_batches: 0.5
   limit_test_batches: null
   log_every_n_steps: 50
   accelerator: "gpu"
@@ -33,6 +33,7 @@ data:
     batch_size: 16
     epsilon : 7
     mix_video: false
+    position_format: "flattened"
   transforms: null
 
 model:
@@ -48,7 +49,7 @@ model:
 lit_model:
   name: LitModel
 
-loss_func: unweighted_cross_entropy
+loss_func: weighted_cross_entropy
 
 optimizer:
   name: SGD
@@ -71,6 +72,6 @@ callbacks:
     dir: experiments/gat/train
   early_stopping:
     monitor: "train/epoch_loss"
-    patience: 7
+    patience: 100
     mode: min
     check_on_train_epoch_end: True

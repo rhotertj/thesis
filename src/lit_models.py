@@ -55,8 +55,7 @@ class LitModel(pl.LightningModule):
             positions = input["positions"]
             return self.model(positions, positions.ndata["positions"])
         elif isinstance(self.model, PositionTransformer):
-            positions = input["positions"].ndata["positions"]
-            positions = positions.reshape(-1, 15, 49)
+            positions = input["positions"]
             return self.model(positions)
         elif isinstance(self.model, MultiModalModel):
             return self.model(input)

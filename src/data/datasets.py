@@ -16,8 +16,10 @@ from data.data_utils import (
     combine_teams_with_indicator,
     mirror_positions,
     ensure_correct_team_size,
-    combine_ball_with_indicator
+    combine_ball_with_indicator,
+    PositionContainer
 )
+
 
 class MultiModalHblDataset(Dataset):
 
@@ -29,7 +31,7 @@ class MultiModalHblDataset(Dataset):
         load_frames: bool = True,
         transforms: Union[None, Compose] = None,
         label_mapping: callable = lambda x: x,
-        overlap : bool = True
+        overlap: bool = True
     ):
         """
         This dataset provides a number of video frames (determined by seq_len) and
@@ -111,7 +113,7 @@ class MultiModalHblDataset(Dataset):
             int: Dataset length.
         """
         if not self.overlap:
-            return (self.index_tracker[-1]  // (self.seq_len * self.sampling_rate)) - 1
+            return (self.index_tracker[-1] // (self.seq_len * self.sampling_rate)) - 1
 
         return self.index_tracker[-1] - (self.seq_len * self.sampling_rate)
 
@@ -191,7 +193,7 @@ class MultiModalHblDataset(Dataset):
                 frames = self.transforms(frames)
 
         team_a_pos, team_b_pos, ball_pos, _ = self.position_arrays[match_number]
-        
+
         position_slice = slice(
             (frame_idx - half_range) - positions_offset,
             (frame_idx + half_range) - positions_offset,
@@ -201,24 +203,31 @@ class MultiModalHblDataset(Dataset):
         team_b_pos = team_b_pos[position_slice]
         ball_pos = ball_pos[position_slice]
 
-        team_a_pos, team_b_pos = ensure_correct_team_size(team_a_pos, team_b_pos)
+        # team_a_pos, team_b_pos = ensure_correct_team_size(team_a_pos, team_b_pos)
 
-        teams_pos = combine_teams_with_indicator(team_a_pos, team_b_pos)
-        ball_pos = combine_ball_with_indicator(ball_pos)
+        # teams_pos = combine_teams_with_indicator(team_a_pos, team_b_pos)
+        # ball_pos = combine_ball_with_indicator(ball_pos)
 
-        all_pos = np.vstack([teams_pos, ball_pos])
+        # all_pos = np.vstack([teams_pos, ball_pos])
 
-        all_pos = mirror_positions(
-            all_pos,
-            vertical=self.mirror_vertical[match_number],
-            horizontal=self.mirror_horizontal[match_number],
+        # all_pos = mirror_positions(
+        #     all_pos,
+        #     vertical=self.mirror_vertical[match_number],
+        #     horizontal=self.mirror_horizontal[match_number],
+        # )
+        positions = PositionContainer(
+            team_a=team_a_pos,
+            team_b=team_b_pos,
+            ball=ball_pos,
+            mirror_horizontal=self.mirror_horizontal[match_number],
+            mirror_vertical=self.mirror_vertical[match_number],
         )
 
         label = self.label_mapping(label)
 
         instance = {
             "frames": frames,
-            "positions": all_pos,
+            "positions": positions,
             "label": label,
             "label_offset": label_offset,
             "frame_idx": frame_idx,
@@ -234,7 +243,7 @@ class MultiModalHblDataset(Dataset):
         old_setting = self.load_frames
         self.load_frames = False
         labels = Counter()
-        for i in tqdm(range(len(self)), total = len(self)):
+        for i in tqdm(range(len(self)), total=len(self)):
             l = self.__getitem__(i)["label"]
             labels[l] += 1
         self.load_frames = old_setting
@@ -254,11 +263,13 @@ class MultiModalHblDataset(Dataset):
         jd["balls"] = ball
         return jd
 
+
 class ResampledHblDataset(Dataset):
+
     def __init__(
         self,
         meta_path: str,
-        idx_to_frame : str,
+        idx_to_frame: str,
         seq_len: int = 16,
         sampling_rate: int = 1,
         load_frames: bool = True,
@@ -402,7 +413,7 @@ class ResampledHblDataset(Dataset):
                 frames = self.transforms(frames)
 
         team_a_pos, team_b_pos, ball_pos, _ = self.position_arrays[match_number]
-        
+
         position_slice = slice(
             (frame_idx - half_range) - positions_offset,
             (frame_idx + half_range) - positions_offset,
@@ -412,24 +423,31 @@ class ResampledHblDataset(Dataset):
         team_b_pos = team_b_pos[position_slice]
         ball_pos = ball_pos[position_slice]
 
-        team_a_pos, team_b_pos = ensure_correct_team_size(team_a_pos, team_b_pos)
+        # team_a_pos, team_b_pos = ensure_correct_team_size(team_a_pos, team_b_pos)
 
-        teams_pos = combine_teams_with_indicator(team_a_pos, team_b_pos)
-        ball_pos = combine_ball_with_indicator(ball_pos)
+        # teams_pos = combine_teams_with_indicator(team_a_pos, team_b_pos)
+        # ball_pos = combine_ball_with_indicator(ball_pos)
 
-        all_pos = np.vstack([teams_pos, ball_pos])
+        # all_pos = np.vstack([teams_pos, ball_pos])
 
-        all_pos = mirror_positions(
-            all_pos,
-            vertical=self.mirror_vertical[match_number],
-            horizontal=self.mirror_horizontal[match_number],
+        # all_pos = mirror_positions(
+        #     all_pos,
+        #     vertical=self.mirror_vertical[match_number],
+        #     horizontal=self.mirror_horizontal[match_number],
+        # )
+        positions = PositionContainer(
+            team_a=team_a_pos,
+            team_b=team_b_pos,
+            ball=ball_pos,
+            mirror_horizontal=self.mirror_horizontal[match_number],
+            mirror_vertical=self.mirror_vertical[match_number],
         )
 
         label = self.label_mapping(label)
 
         instance = {
             "frames": frames,
-            "positions": all_pos,
+            "positions": positions,
             "label": label,
             "label_offset": label_offset,
             "frame_idx": frame_idx,
@@ -445,7 +463,7 @@ class ResampledHblDataset(Dataset):
         old_setting = self.load_frames
         self.load_frames = False
         labels = Counter()
-        for i in tqdm(range(len(self)), total = len(self)):
+        for i in tqdm(range(len(self)), total=len(self)):
             l = self.__getitem__(i)["label"]
             labels[l] += 1
         self.load_frames = old_setting
@@ -478,7 +496,7 @@ if "__main__" == __name__:
     )
     idx = 186319
     instance = data[idx]
- 
+
     print("All good")
     exit()
     frames = instance["frames"]

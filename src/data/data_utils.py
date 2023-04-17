@@ -5,6 +5,151 @@ import dgl
 import networkx as nx
 import itertools
 
+# TODO: Think about different "styles" of graph 
+#   -> connecting player by team and not by proximity
+#   -> handcrafted features
+class PositionContainer:
+
+    def __init__(
+        self,
+        team_a: np.ndarray,
+        team_b: np.ndarray,
+        ball: np.ndarray,
+        mirror_vertical: bool = False,
+        mirror_horizontal: bool = False,
+    ) -> None:
+        """Takes positions in [T, N, C] format and preprocesses them. 
+
+        Args:
+            team_a (np.ndarray): Positions for team A.
+            team_b (np.ndarray): Positions for team B.
+            ball (np.ndarray): Ball positions.
+            mirror_vertical (bool, optional): Whether to mirror positions vertically. Defaults to False.
+            mirror_horizontal (bool, optional): Whether to mirror positions horizontally. Defaults to False.
+        """        
+        self.team_a = team_a
+        self.team_b = team_b
+        self.ball = ball
+
+        self.mirror_vertical = mirror_vertical
+        self.mirror_horizontal = mirror_horizontal
+        self._preprocess_data()
+        self.T = self.team_a.shape[-3]
+        self.N = 15
+
+    @staticmethod
+    def from_multiple_containers(containers : list):
+        # Create a Positioncontainer that batches multiple (preprocessed) containers
+        pass
+
+    def _preprocess_data(self):
+        # ensure correct teamsizes
+        self.team_a, self.team_b = ensure_correct_team_size(self.team_a, self.team_b)
+
+        # Mirror teams and ball if necessary
+        self.team_a = mirror_positions_tn3(
+            self.team_a,
+            vertical=self.mirror_vertical,
+            horizontal=self.mirror_horizontal,
+        )
+        self.team_b = mirror_positions_tn3(
+            self.team_b,
+            vertical=self.mirror_vertical,
+            horizontal=self.mirror_horizontal,
+        )
+        self.ball = mirror_positions_tn3(
+            self.ball,
+            vertical=self.mirror_vertical,
+            horizontal=self.mirror_horizontal,
+        )
+
+        self.team_a = torch.Tensor(self.team_a)
+        self.team_b = torch.Tensor(self.team_b)
+        self.ball = torch.Tensor(self.ball)
+
+
+    def as_graph_per_sequence(self, epsilon):
+        # return one graph per clip (batched over multiple instances)
+        # use multiple bntx3 formats to create graph per clip
+        positions = self.as_flattened(normalize=False)
+        G = dgl.graph([]).to(positions.device)
+        G = dgl.add_nodes(G, 15)
+
+        # create edges wrt eps nbhood at timestep 0
+        for a1, a2 in itertools.combinations(range(15), r=2):
+            dist = torch.linalg.norm(positions[a1, 1:2] - positions[a2, 1:2])
+            if dist < epsilon:
+                G = dgl.add_edges(G, [a1, a2], [a2, a1])
+
+        positions[:, 1::3] /= 40  # court length
+        positions[:, 2::3] /= 20  # court length
+        G.ndata["positions"] = positions
+
+        G = dgl.add_self_loop(G)
+        return G
+
+    def as_graph_per_timestep(self, epsilon):
+        # return T graphs for single instance
+        # use btn3 format for choose per timestep and adress players accordingly
+        positions = self.as_TNC(normalize=False)
+        graphs = []
+        for t in range(positions.shape[0]):
+            G = dgl.graph([]).to(positions.device)
+            G = dgl.add_nodes(G, 15)
+
+            # create edges wrt eps nbhood
+            for a1, a2 in itertools.combinations(range(15), r=2):
+                # team indicator is a position 0
+                dist = torch.linalg.norm(positions[t, a1, 1:3] - positions[t, a2, 1:3])
+                if dist < epsilon:
+                    G = dgl.add_edges(G, [a1, a2], [a2, a1])
+
+            positions[t, :, 1] /= 40  # court length
+            positions[t, :, 2] /= 20  # court length
+            G.ndata["positions"] = positions[t]
+            print(positions[t].shape)
+
+            G = dgl.add_self_loop(G)
+            graphs.append(G)
+
+        return graphs
+
+    def as_TNC(self, normalize=True, add_indicator=True):
+        # return (T, N, C); C = 3+1
+        all_pos = torch.concatenate([self.team_a, self.team_b, self.ball], dim=-2)
+        if normalize:
+            all_pos[:, :, 0] /= 40
+            all_pos[:, :, 1] /= 20
+        if add_indicator:
+            # concat agents along agent dimension, add team indicator per agent
+            indicator = torch.concatenate([
+                torch.zeros(7),
+                torch.ones(7),
+                torch.Tensor([2])
+            ])
+            indicator = indicator.repeat(self.T).reshape(self.T, self.N, 1)
+            all_pos = torch.concatenate([indicator, all_pos], dim=-1)
+
+        return all_pos
+
+    def as_flattened(self, normalize=True):
+        # return (B, N, 1+ T*3)
+        # concat agents along agent dimension, flatten time, add team indicator per agent
+        all_pos = torch.concatenate([self.team_a, self.team_b, self.ball], dim=-2)
+        all_pos = torch.einsum("tnc->ntc", all_pos).reshape(15, -1)
+        if normalize:
+            all_pos[:, 0::3] /= 40
+            all_pos[:, 1::3] /= 20
+
+        indicator = torch.concatenate([
+            torch.zeros(7),
+            torch.ones(7),
+            torch.Tensor([2])
+        ]).reshape(-1, 1)
+        # concat agents along agent dimension, add team indicator per agent
+        all_pos = torch.concatenate([indicator, all_pos], dim=-1)
+        return all_pos
+
 
 def combine_teams_with_indicator(team_a: np.ndarray, team_b: np.ndarray) -> np.ndarray:
     """Adds a third dimension to both teams, flattens the teams along the temporal dimension and adds a bit that indicates the team membership of players.
@@ -23,14 +168,15 @@ def combine_teams_with_indicator(team_a: np.ndarray, team_b: np.ndarray) -> np.n
         team_a = np.concatenate([team_a, dummy_z], axis=-1)
         team_b = np.concatenate([team_b, dummy_z], axis=-1)
     teams_pos = np.hstack([team_a, team_b])
-    # team player location
+    # time player location
     teams_pos = np.einsum("tpl->ptl", teams_pos).reshape(14, -1)
-    team_a_indicator = np.zeros((7,1))
+    team_a_indicator = np.zeros((7, 1))
     team_b_indicator = team_a_indicator + 1
 
     indicator = np.vstack([team_a_indicator, team_b_indicator])
     teams_pos = np.concatenate([indicator, teams_pos], axis=1)
     return teams_pos
+
 
 def combine_ball_with_indicator(ball_pos: np.ndarray) -> np.ndarray:
     """Adds a third dimension to the ball, flattens it along the temporal dimension and adds a bit that indicates
@@ -103,6 +249,32 @@ def ensure_correct_team_size(team_a, team_b):
     return team_a_clean, team_b_clean
 
 
+def mirror_positions_tn3(
+    positions: np.ndarray,
+    horizontal: bool = True,
+    vertical: bool = False,
+    court_width: int = 40,
+    court_height: int = 20
+):
+    """Mirrors the given positions of players and ball on the court.
+    Horizontal mirroring effectively switches sides whereas vertical mirroring
+    switches left and right.
+
+    Args:
+        positions (np.ndarray): Player and ball positions.
+        horizontal (bool, optional): Mirror horizontally. Defaults to False.
+        vertical (bool, optional): Mirror vertically. Defaults to True.
+        court_width (int, optional): Court width in meters. Defaults to 40.
+        court_height (int, optional): Court height in meters. Defaults to 20.
+    """
+    if vertical:
+        positions[:, :, 1] = court_height - positions[:, :, 1]
+    if horizontal:
+        positions[:, :, 0] = court_width - positions[:, :, 0]
+
+    return positions
+
+
 def mirror_positions(
     positions: np.ndarray,
     horizontal: bool = True,
@@ -122,9 +294,9 @@ def mirror_positions(
         court_height (int, optional): Court height in meters. Defaults to 20.
     """
     if vertical:
-        positions[:, 2::2] = court_height - positions[:, 2::2]
+        positions[:, 2::3] = court_height - positions[:, 2::3]
     if horizontal:
-        positions[:, 1::2] = court_width - positions[:, 1::2]
+        positions[:, 1::3] = court_width - positions[:, 1::3]
 
     return positions
 
@@ -172,10 +344,19 @@ def get_index_offset(boundaries, idx2frame, idx):
     raise IndexError(f"{idx} could not be found with boundaries {boundaries}.")
 
 
-def create_graph(positions : torch.Tensor, epsilon : float):    
+def create_graph(positions: torch.Tensor, epsilon: float) -> dgl.DGLGraph:
+    """Create a `dgl.DGLGraph` instance that connects 
+
+    Args:
+        positions (torch.Tensor): _description_
+        epsilon (float): _description_
+
+    Returns:
+        _type_: _description_
+    """    
     # create graph, fully connected
     G = dgl.graph([]).to(positions.device)
-    G = dgl.add_nodes(G, 15)   
+    G = dgl.add_nodes(G, 15)
 
     # create edges wrt eps nbhood at timestep 0
     for a1, a2 in itertools.combinations(range(15), r=2):
@@ -191,12 +372,22 @@ def create_graph(positions : torch.Tensor, epsilon : float):
     G = dgl.add_self_loop(G)
     return G
 
+
 if __name__ == "__main__":
-    positions = torch.ones((16,15,3))
+    batch_size = 1
+    containers = []
+    for _ in range(batch_size):
+        a, b = torch.rand((16,7,3)), torch.ones((16,7,3)) 
+        ball = torch.rand((16,1,3)) + 1
+        pos = PositionContainer(a, b, ball)
+        print(pos.as_graph_per_timestep(7))
+        containers.append(pos)
 
-    G = create_graph(positions, 7)
-    print(G.nodes(data=True))
+    # batched_container = PositionContainer.from_multiple_containers(containers)
+    # print(batched_container.asTNC().shape)
+    # G = create_graph(positions, 7)
+    # print(G.nodes(data=True))
 
-    dG = dgl.from_networkx(G, node_attrs=["positions"], idtype=torch.float32)
+    # dG = dgl.from_networkx(G, node_attrs=["positions"], idtype=torch.float32)
 
-    print(dG)
+    # print(dG)

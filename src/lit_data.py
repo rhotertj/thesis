@@ -10,7 +10,7 @@ import pytorchvideo.transforms as ptvt
 
 from data.datasets import MultiModalHblDataset, ResampledHblDataset
 from data.labels import LabelDecoder
-from data.data_utils import create_graph
+from data.data_utils import PositionContainer
 
 # NormalizeVideo(
 #     mean=[0.39449842, 0.4566527, 0.49926605],
@@ -143,7 +143,8 @@ class LitResampledHblDataset(pl.LightningDataModule):
         batch_size : int = 1,
         epsilon : int = 7,
         mix_video : bool = True,
-        video_transforms : t.Compose = None
+        video_transforms : t.Compose = None,
+        position_format : str = "graph_per_sequence"
         ) -> None:
         super().__init__()
 
@@ -166,11 +167,11 @@ class LitResampledHblDataset(pl.LightningDataModule):
 
         if mix_video:
             video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes, mixup_alpha=0.8, cutmix_prob=0)
-            self.train_collate = collate_function_builder(epsilon, load_frames, video_transform)
+            self.train_collate = collate_function_builder(epsilon, load_frames, video_transform, position_format)
         else:
-            self.train_collate = collate_function_builder(epsilon, load_frames)
+            self.train_collate = collate_function_builder(epsilon, load_frames, position_format=position_format)
         
-        self.val_collate = collate_function_builder(epsilon, load_frames)
+        self.val_collate = collate_function_builder(epsilon, load_frames, position_format=position_format)
 
 
     def setup(self, stage : str):
@@ -236,7 +237,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
         # Nothing to do here (yet)
         pass
 
-def collate_function_builder(epsilon : int, load_frames : bool, mix_video : callable = None):
+def collate_function_builder(epsilon : int, load_frames : bool, mix_video : callable = None, position_format : str = "graph_per_sequence"):
 
     def multimodal_collate(instances : list):
         """Collate function that batches both position data and video data.
@@ -260,15 +261,20 @@ def collate_function_builder(epsilon : int, load_frames : bool, mix_video : call
                 batch[k] = torch.stack([instance[k] for instance in instances])
 
             elif isinstance(first_entry, np.ndarray): # frames, positions
-                if k == "positions":
-                    graphs = [create_graph(torch.Tensor(instance[k]), epsilon) for instance in instances]
-                    batch[k] = dgl.batch(graphs)
-                else:
-                    batch[k] = torch.stack([torch.tensor(instance[k]) for instance in instances])
+                batch[k] = torch.stack([torch.tensor(instance[k]) for instance in instances])
                 
             elif isinstance(first_entry, (int, float, np.int64, np.float64)):
                 # frame_idx, query_idx, label_offset, label, match_number
                 batch[k] = torch.tensor([instance[k] for instance in instances])
+
+            elif isinstance(first_entry, PositionContainer):
+                # TODO Think about "batching" graphs per timestep!
+                if position_format == "graph_per_sequence":
+                    batch[k] = dgl.batch([instance[k].as_graph_per_sequence(epsilon) for instance in instances])
+                if position_format == "flattened":
+                    batch[k] = torch.stack([instance[k].as_flattened(epsilon) for instance in instances])
+
+
         r = torch.rand(1).item()
         if (not mix_video is None) and r < 0.5:
             batch["frames"], batch["label"] = mix_video(batch["frames"], batch["label"])

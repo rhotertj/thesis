@@ -216,7 +216,8 @@ if __name__ == "__main__":
             t.Resize((224,224))
             ])
 
-    collate_fn = collate_function_builder(7, True, None)
+    collate_fn_flat = collate_function_builder(7, True, None, "flattened")
+    collate_fn_graph = collate_function_builder(7, True, None, "graph_per_sequence")
 
     dataset = MultiModalHblDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", 16, sampling_rate=4, transforms=basic_transforms, overlap=False, load_frames=False)
 
@@ -225,8 +226,14 @@ if __name__ == "__main__":
         x = dataset[i*25]
         instances.append(x)
 
-    batch = collate_fn(instances)
+    flat_batch = collate_fn_flat(instances)
+    graph_batch = collate_fn_graph(instances)
 
     model = PositionTransformer(49, 128, 3, 8, True)
+    print(flat_batch["positions"].shape)
+    print(model(flat_batch["positions"]))
 
-    model(batch["positions"].ndata["positions"])
+    gmodel = GAT(49, 128, 3, "linear", 8)
+    print(graph_batch["positions"].ndata["positions"].shape)
+    print(gmodel(graph_batch["positions"], graph_batch["positions"].ndata["positions"]))
+    
