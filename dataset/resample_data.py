@@ -136,8 +136,10 @@ def load_split_matches_df(data_path: Path, sequence_length: int, sampling_rate: 
 def balance_classes(overlap_df: pd.DataFrame, chunk_df: pd.DataFrame, background_size: float) -> pd.DataFrame:
     overlapped_shots = overlap_df[overlap_df.class_coarse == "Shot"]
     overlapped_passes = overlap_df[overlap_df.class_coarse == "Pass"].iloc[:len(overlapped_shots)]
-    n_sp = len(overlapped_passes) + len(overlapped_shots)
-    n_background = int(n_sp / background_size)
+    n_shots_passes = len(overlapped_passes) + len(overlapped_shots)
+    frac_shots_passes = 1 - background_size
+    n_background = int((n_shots_passes / frac_shots_passes) * background_size)
+    print("Sampling n background", n_background, "for shots and passes:", n_shots_passes)
     overlapped_background = overlap_df[overlap_df.shot.isnull()].sample(n_background)
     balanced_df = pd.concat([overlapped_passes, overlapped_background, overlapped_shots])
     balanced_df.sort_values(by=["frame_idx"], inplace=True)
