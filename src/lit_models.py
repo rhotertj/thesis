@@ -10,10 +10,11 @@ import itertools
 
 from utils import draw_trajectory, plot_confmat
 from video_models import make_kinetics_mvit
-from graph_models import GAT, PositionTransformer
+from graph_models import GAT, PositionTransformer, GIN
 from multimodal_models import MultiModalModel
 
 from data.labels import LabelDecoder
+
 
 class LitModel(pl.LightningModule):
 
@@ -22,8 +23,8 @@ class LitModel(pl.LightningModule):
         label_mapping: LabelDecoder,
         scheduler: callable,
         optimizer: callable,
-        loss_func : callable,
-        model : torch.nn.Module
+        loss_func: callable,
+        model: torch.nn.Module
     ) -> None:
         super().__init__()
         num_classes = label_mapping.num_classes
@@ -36,9 +37,11 @@ class LitModel(pl.LightningModule):
         self.optimizer = optimizer
         self.class_names = label_mapping.class_names
 
+        self.train_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, average=None)
+        self.weighted_train_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes)
 
-        self.train_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, multiclass=True, average=None)
-        self.val_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, multiclass=True, average=None)
+        self.val_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, average=None)
+        self.weighted_val_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes)
 
         # cache, needed from lightning v2.0.0
         self.ground_truths = []
@@ -51,7 +54,7 @@ class LitModel(pl.LightningModule):
         if isinstance(self.model, pytorchvideo.models.vision_transformers.MultiscaleVisionTransformers):
             x = input["frames"]
             return self.model(x)
-        elif isinstance(self.model, GAT):
+        elif isinstance(self.model, (GAT, GIN)):
             positions = input["positions"]
             return self.model(positions, positions.ndata["positions"])
         elif isinstance(self.model, PositionTransformer):
@@ -59,6 +62,8 @@ class LitModel(pl.LightningModule):
             return self.model(positions)
         elif isinstance(self.model, MultiModalModel):
             return self.model(input)
+        else:
+            raise NotImplementedError(f"Unknown model type {type(self.model)}")
 
     def training_step(self, batch, batch_idx):
         targets = batch["label"]
@@ -74,19 +79,22 @@ class LitModel(pl.LightningModule):
             targets = targets.argmax(-1)
 
         self.train_accuracy.update(y, targets)
+        self.weighted_train_accuracy.update(y, targets)
         self.log("train/batch_acc", torch.mean((targets == y.argmax(-1)).to(torch.float32)))
         return loss
 
     def on_train_epoch_start(self):
         self.train_accuracy.reset()
+        self.weighted_train_accuracy.reset()
         self.train_loss.clear()
 
     def on_train_epoch_end(self):
         self.log("train/epoch_loss", np.mean(self.train_loss))
         acc_per_class = self.train_accuracy.compute()
-        self.log("train/acc", torch.mean(acc_per_class))
-        
-        acc_dict = {f"train/acc_{n}" : acc_per_class[i] for i, n in enumerate(self.class_names)}
+        acc = self.weighted_train_accuracy.compute()
+        self.log("train/acc", acc)
+
+        acc_dict = {f"train/acc_{n}": acc_per_class[i] for i, n in enumerate(self.class_names)}
         self.log_dict(acc_dict)
 
     def on_validation_epoch_start(self) -> None:
@@ -94,7 +102,7 @@ class LitModel(pl.LightningModule):
         self.predictions.clear()
         self.confidences.clear()
         self.val_loss.clear()
-        
+        self.weighted_val_accuracy.reset()
         self.val_accuracy.reset()
 
     def validation_step(self, batch, batch_idx):
@@ -106,6 +114,7 @@ class LitModel(pl.LightningModule):
         self.log("val/batch_loss", loss.mean())
 
         self.val_accuracy.update(y, targets)
+        self.weighted_val_accuracy.update(y, targets)
         preds = y.detach().cpu()
 
         # save prediction and ground truth for validation metrics
@@ -115,12 +124,14 @@ class LitModel(pl.LightningModule):
             self.ground_truths.append(targets[b].detach().cpu().item())
         self.val_loss.append(loss.detach().cpu().item())
 
-
     def on_validation_epoch_end(self) -> None:
         acc_per_class = self.val_accuracy.compute()
-        self.log("val/acc", torch.mean(acc_per_class))
-        acc_dict = {f"val/acc_{n}" : acc_per_class[i] for i, n in enumerate(self.class_names)}
+        acc = self.weighted_val_accuracy.compute()
+        self.log("val/acc", acc)
+
+        acc_dict = {f"val/acc_{n}": acc_per_class[i] for i, n in enumerate(self.class_names)}
         self.log_dict(acc_dict)
+
         self.log("val/loss", np.mean(self.val_loss))
 
         cm = wandb.plot.confusion_matrix(
@@ -147,7 +158,8 @@ class LitModel(pl.LightningModule):
             return self.optimizer
         return [self.optimizer], [self.scheduler]
 
-def unweighted_cross_entropy(batch_y : torch.Tensor, batch_gt : torch.Tensor, batch_label_offsets : torch.Tensor = None):
+
+def unweighted_cross_entropy(batch_y: torch.Tensor, batch_gt: torch.Tensor, batch_label_offsets: torch.Tensor = None):
     """Computes the cross entropy loss across a batch.
 
     Args:
@@ -157,10 +169,11 @@ def unweighted_cross_entropy(batch_y : torch.Tensor, batch_gt : torch.Tensor, ba
 
     Returns:
         torch.Tensor: Loss.
-    """    
+    """
     return torch.nn.functional.cross_entropy(batch_y, batch_gt, label_smoothing=0.1)
 
-def weighted_cross_entropy(batch_y : torch.Tensor, batch_gt : torch.Tensor, batch_label_offsets : torch.Tensor):
+
+def weighted_cross_entropy(batch_y: torch.Tensor, batch_gt: torch.Tensor, batch_label_offsets: torch.Tensor):
     """Computes the cross entropy loss between prediction and target.
     Instances that portray an event in the second half of the sequence have reduced losses. 
 
@@ -175,5 +188,5 @@ def weighted_cross_entropy(batch_y : torch.Tensor, batch_gt : torch.Tensor, batc
     batch_losses = torch.nn.functional.cross_entropy(batch_y, batch_gt, reduction='none', label_smoothing=0.1)
     for i, o in enumerate(batch_label_offsets):
         if o > 0:
-            batch_losses[i] *= 1/o
+            batch_losses[i] *= 1 / o
     return batch_losses.mean()
