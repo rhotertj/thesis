@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 from dgl.nn import GATv2Conv
 import dgl
 import torch.nn.functional as F
@@ -68,40 +69,75 @@ class GAT(torch.nn.Module):
         return h
 
 
-class GCN(torch.nn.Module):
-    # graph conv layer module
-    def __init__(
-        self,
-        dim_in: int,
-        dim_h: int,
-        num_classes: int,
-        input_operation: str,
-        batch_size : int,
-        readout: str = "mean",
-        num_heads: int = 8,
-        use_head: bool = True,
+class GIN_MLP(nn.Module):
+    """Construct two-layer MLP-type aggreator for GIN model"""
+
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super().__init__()
+        self.linears = nn.ModuleList()
+        # two-layer MLP
+        self.linears.append(nn.Linear(input_dim, hidden_dim, bias=False))
+        self.linears.append(nn.Linear(hidden_dim, output_dim, bias=False))
+        self.batch_norm = nn.BatchNorm1d((hidden_dim))
+
+    def forward(self, x):
+        h = x
+        h = F.relu(self.batch_norm(self.linears[0](h)))
+        return self.linears[1](h)
+
+class GIN(nn.Module):
+
+    def __init__(self,
+        dim_in,
+        dim_h,
+        num_classes,
+        learn_eps,
+        batch_size,
+        input_operation,
     ):
+        super().__init__()
 
-        pass
+        self.input_layer = InputLayer(dim_in, dim_h, op=input_operation, batch_size=batch_size)
+        self.ginlayers = nn.ModuleList()
+        self.batch_norms = nn.ModuleList()
+        num_layers = 5
+        
+        for i in range(num_layers - 1):
+            if i==0:
+                mlp = GIN_MLP(self.input_layer.get_output_size(), dim_h, dim_h)
+            else: 
+                mlp = GIN_MLP(dim_h, dim_h, dim_h)
+            self.ginlayers.append(
+                dgl.nn.GINConv(mlp, learn_eps=learn_eps)
+            )
+            self.batch_norms.append(nn.BatchNorm1d(dim_h))
+ 
+        # linear functions for graph sum poolings of output of each layer
+        self.linear_prediction = nn.ModuleList()
+        self.linear_prediction.append(
+            nn.Linear(self.input_layer.get_output_size(), num_classes)
+        )
+        for _ in range(num_layers):
+            self.linear_prediction.append(nn.Linear(dim_h, num_classes))
+        self.drop = nn.Dropout(0.5)
+        self.pool = dgl.nn.glob.SumPooling()  # AvgPooling on social network datasets
 
-    def forward(self, g, g_feats):
-        # graph attention
-        # g_feats = self.input_layer(g_feats)
-        h = self.input_layer(g_feats)
-        h = self.gat1(g, h)
-        # average heads
-        h = torch.mean(h, dim=1)
-        h = self.relu(h)
-        h = self.gat2(g, h)
-        h = torch.mean(h, dim=1)
-        # readout function (handles batched graph)
-        g.ndata["h"] = h
-        h = dgl.readout_nodes(g, "h", op=self.readout)
-        # classify graph representation
-        if self.use_head:
-            h = self.head(h)
-            h = h.softmax(-1)
-        return h
+    def forward(self, g, h):
+        # list of hidden representation at each layer (including the input layer)
+        h = self.input_layer(h)
+        hidden_reprs = [h]
+        for i, layer in enumerate(self.ginlayers):
+            h = layer(g, h)
+            h = self.batch_norms[i](h)
+            h = F.relu(h)
+            hidden_reprs.append(h)
+        score_over_layer = 0
+        # perform graph sum pooling over all nodes in each layer
+        for i, h in enumerate(hidden_reprs):
+            pooled_h = self.pool(g, h)
+            score_over_layer += self.drop(self.linear_prediction[i](pooled_h))
+        return score_over_layer
+
 
 class PositionTransformer(torch.nn.Module):
     
@@ -110,6 +146,7 @@ class PositionTransformer(torch.nn.Module):
         dim_in: int,
         dim_h: int,
         num_classes: int,
+        input_operation : str,
         batch_size : int,
         num_heads: int = 8,
         use_head: bool = True,
@@ -118,13 +155,13 @@ class PositionTransformer(torch.nn.Module):
         super().__init__()
         self.use_head = use_head
 
-        self.linear = torch.nn.Linear(dim_in, dim_h)
+        self.input_layer = InputLayer(dim_in, dim_h, op=input_operation, batch_size=batch_size)
         layer = torch.nn.TransformerEncoderLayer(d_model=dim_h, nhead=num_heads)
         self.transformer = torch.nn.TransformerEncoder(layer, num_layers=6)
         self.head = create_default_head(input_dim=dim_h, output_dim=num_classes, activation=F.relu, dropout=0.3)
 
     def forward(self, x):
-        y = self.linear(x)
+        y = self.input_layer(x)
         y = self.transformer(y)
         y = y.mean(dim=1)
         if self.use_head:

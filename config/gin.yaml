@@ -1,0 +1,87 @@
+seed_everything: 43
+stage: train
+logger:
+  project: thesis_gat
+
+trainer: # logger extra
+  num_nodes: 1
+  devices: 1
+  overfit_batches: false # change int of n batches to debug with n batches
+  check_val_every_n_epoch: 1
+  accumulate_grad_batches: 1
+  max_epochs: 50
+  max_steps: -1
+  max_time: null
+  limit_train_batches: null # set fraction of training data
+  limit_val_batches: null
+  limit_test_batches: null
+  log_every_n_steps: 50
+  accelerator: "gpu"
+  precision: 32
+  num_sanity_val_steps: 1
+
+data:
+  name: LitResampledHblDataset
+  params:
+    meta_path: "/nfs/home/rhotertj/datasets/hbl/"
+    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta30_train.jsonl"
+    idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta30_val.jsonl"
+    idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta30_test.jsonl"
+    seq_len: 16
+    sampling_rate: 2
+    load_frames: false
+    batch_size: 16
+    epsilon : 7
+    mix_video: false
+    position_format: graph_per_sequence
+  transforms: null
+
+model:
+  name: GIN
+  params:
+    dim_in: 49
+    dim_h: 256
+    #readout: "mean"
+    input_operation: "linear"
+    #num_heads: 8
+    #use_head: true
+    learn_eps: false
+
+lit_model:
+  name: LitModel
+
+loss_func: unweighted_cross_entropy
+
+# optimizer:
+#   name: Adam
+#   params:
+#     lr: 0.005
+#     weight_decay: 0.0005
+
+# scheduler: null
+optimizer:
+  name: SGD
+  params:
+    lr: 0.003
+    momentum: 0.9
+    weight_decay: 1e-4
+
+scheduler:
+  name: CosineAnnealingLR
+
+
+
+num_classes: 3
+checkpoint: null
+save_config: true
+log_proportions: true
+
+callbacks:
+  checkpointing:
+    every_n: 1
+    dir: experiments/gat/train
+  early_stopping:
+    monitor: "train/epoch_loss"
+    patience: 25
+    mode: min
+    check_on_train_epoch_end: True

@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 
 from torch.optim import SGD, Adam
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
 
 from torchvision import transforms as t
 import video_transforms as vt
@@ -19,7 +19,7 @@ import pytorchvideo.transforms as ptvt
 
 from lit_models import LitModel, weighted_cross_entropy, unweighted_cross_entropy
 from video_models import make_kinetics_mvit
-from graph_models import GAT, PositionTransformer
+from graph_models import GAT, PositionTransformer, GIN
 from multimodal_models import MultiModalModel
 from lit_data import LitMultiModalHblDataset, LitResampledHblDataset
 from data.labels import LabelDecoder
