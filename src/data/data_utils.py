@@ -37,12 +37,9 @@ class PositionContainer:
         self.T = self.team_a.shape[-3]
         self.N = 15
 
-    @staticmethod
-    def from_multiple_containers(containers : list):
-        # Create a Positioncontainer that batches multiple (preprocessed) containers
-        pass
-
     def _preprocess_data(self):
+        """Truncate or pad teams to size 7, mirror positions if needed. 
+        """        
         # ensure correct teamsizes
         self.team_a, self.team_b = ensure_correct_team_size(self.team_a, self.team_b)
 
@@ -67,19 +64,42 @@ class PositionContainer:
         self.team_b = torch.Tensor(self.team_b)
         self.ball = torch.Tensor(self.ball)
 
+    def convert_relative_to_ball(self):
+        # TODO: This needs to be done after normalizing but before creating the graph
+        self.team_a = torch.linalg.norm(self.team_a - self.ball)
+        self.team_b = torch.linalg.norm(self.team_b - self.ball)
 
-    def as_graph_per_sequence(self, epsilon):
-        # return one graph per clip (batched over multiple instances)
-        # use multiple bntx3 formats to create graph per clip
+
+    def as_graph_per_sequence(self, epsilon: int) -> dgl.DGLGraph:
+        """Constructs a graph with flattened trajectory per player as node features.
+        Nodes are connected within epsilon neighborhood or team membership if epsilon = 0.
+
+        Args:
+            epsilon (int): Neighborhood distance.
+
+        Returns:
+            dgl.DGLGraph: The graph with ndata "positions". 
+        """        
         positions = self.as_flattened(normalize=False)
         G = dgl.graph([]).to(positions.device)
         G = dgl.add_nodes(G, 15)
 
-        # create edges wrt eps nbhood at timestep 0
-        for a1, a2 in itertools.combinations(range(15), r=2):
-            dist = torch.linalg.norm(positions[a1, 1:2] - positions[a2, 1:2])
-            if dist < epsilon:
-                G = dgl.add_edges(G, [a1, a2], [a2, a1])
+        if epsilon > 0:
+            # create edges wrt eps nbhood at timestep 0
+            for a1, a2 in itertools.combinations(range(15), r=2):
+                dist = torch.linalg.norm(positions[a1, 1:2] - positions[a2, 1:2])
+                if dist < epsilon:
+                    G = dgl.add_edges(G, [a1, a2], [a2, a1])
+        else:
+            # create edges wrt team membership
+            for a1, a2 in itertools.combinations(range(15), r=2):
+                # ball to agent
+                if a1 == 15 or a2 == 15:
+                    G = dgl.add_edges(G, [a1, a2], [a2, a1])
+
+                # same team
+                if positions[a1][0] == positions[a2][0]:
+                    G = dgl.add_edges(G, [a1, a2], [a2, a1])
 
         positions[:, 1::3] /= 40  # court length
         positions[:, 2::3] /= 20  # court length
@@ -88,21 +108,39 @@ class PositionContainer:
         G = dgl.add_self_loop(G)
         return G
 
-    def as_graph_per_timestep(self, epsilon):
-        # return T graphs for single instance
-        # use btn3 format for choose per timestep and adress players accordingly
+    def as_graph_per_timestep(self, epsilon: int) -> dgl.DGLGraph:
+        """Constructs a graph per timestep with absolute postion as node features.
+        Nodes are connected within epsilon neighborhood or team membership if epsilon = 0.
+
+        Args:
+            epsilon (int): Neighborhood distance.
+
+        Returns:
+            list: List with graphs per timestep. 
+        """        
         positions = self.as_TNC(normalize=False)
         graphs = []
         for t in range(positions.shape[0]):
             G = dgl.graph([]).to(positions.device)
             G = dgl.add_nodes(G, 15)
 
-            # create edges wrt eps nbhood
-            for a1, a2 in itertools.combinations(range(15), r=2):
-                # team indicator is a position 0
-                dist = torch.linalg.norm(positions[t, a1, 1:3] - positions[t, a2, 1:3])
-                if dist < epsilon:
-                    G = dgl.add_edges(G, [a1, a2], [a2, a1])
+            if epsilon > 0:
+                # create edges wrt eps nbhood
+                for a1, a2 in itertools.combinations(range(15), r=2):
+                    # team indicator is a position 0
+                    dist = torch.linalg.norm(positions[t, a1, 1:3] - positions[t, a2, 1:3])
+                    if dist < epsilon:
+                        G = dgl.add_edges(G, [a1, a2], [a2, a1])
+            else:
+                # create edges wrt team membership
+                for a1, a2 in itertools.combinations(range(15), r=2):
+                    # ball to agent
+                    if a1 == 15 or a2 == 15:
+                        G = dgl.add_edges(G, [a1, a2], [a2, a1])
+
+                    # same team
+                    if positions[t, a1, 0] == positions[t, a2, 0]:
+                        G = dgl.add_edges(G, [a1, a2], [a2, a1])
 
             positions[t, :, 1] /= 40  # court length
             positions[t, :, 2] /= 20  # court length
@@ -114,8 +152,19 @@ class PositionContainer:
 
         return graphs
 
-    def as_TNC(self, normalize=True, add_indicator=True):
-        # return (T, N, C); C = 3+1
+    def as_TNC(self, normalize=True, add_indicator=True) -> torch.Tensor:
+        """Returns the positions with separate dimensions for Time (T), Players (N), 
+        and Channel (C).
+
+        The channel dimension is organized as follows: [team, x, y, z].
+
+        Args:
+            normalize (bool, optional): Whether to normalize positions relative to court size. Defaults to True.
+            add_indicator (bool, optional): Whether to add team indicator to channel. Defaults to True.
+
+        Returns:
+            torch.Tensor: Positions in [T, N, C] format.
+        """
         all_pos = torch.concatenate([self.team_a, self.team_b, self.ball], dim=-2)
         if normalize:
             all_pos[:, :, 0] /= 40
@@ -132,9 +181,16 @@ class PositionContainer:
 
         return all_pos
 
-    def as_flattened(self, normalize=True):
-        # return (B, N, 1+ T*3)
-        # concat agents along agent dimension, flatten time, add team indicator per agent
+    def as_flattened(self, normalize=True) -> torch.Tensor:
+        """Returns the positions with separate dimension for Players (N) and positions over time (T*C).
+        A team indicator per player is inserted at position 0.
+
+        Args:
+            normalize (bool, optional):  Whether to normalize positions relative to court size. Defaults to True.
+
+        Returns:
+            torch.Tensor: Positions in [N, 1 + (T * C)] format.
+        """        
         all_pos = torch.concatenate([self.team_a, self.team_b, self.ball], dim=-2)
         all_pos = torch.einsum("tnc->ntc", all_pos).reshape(15, -1)
         if normalize:
@@ -345,15 +401,6 @@ def get_index_offset(boundaries, idx2frame, idx):
 
 
 def create_graph(positions: torch.Tensor, epsilon: float) -> dgl.DGLGraph:
-    """Create a `dgl.DGLGraph` instance that connects 
-
-    Args:
-        positions (torch.Tensor): _description_
-        epsilon (float): _description_
-
-    Returns:
-        _type_: _description_
-    """    
     # create graph, fully connected
     G = dgl.graph([]).to(positions.device)
     G = dgl.add_nodes(G, 15)
