@@ -25,6 +25,9 @@ class ChannelFirst:
             raise ValueError("Channel dimension expected at dimension 1.")
         return torch.einsum("tchw->cthw", video)
 
+    def __repr__(self) -> str:
+        return "[T, C, H, W] -> [C, T, H, W]"
+
 
 class TimeFirst:
     """Transpose a video from shape [C, T, H, W] to [T, C, H, W].
@@ -36,6 +39,9 @@ class TimeFirst:
         if not video.shape[0] in (1,3):
             raise ValueError("Channel dimension expected at dimension 0.")
         return torch.einsum("cthw->tchw", video)
+
+    def __repr__(self) -> str:
+        return "[C, T, H, W] -> [T, C, H, W]"
 
 class RandomHorizontalFlipVideo:
     """
