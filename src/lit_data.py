@@ -144,7 +144,8 @@ class LitResampledHblDataset(pl.LightningDataModule):
         epsilon : int = 7,
         mix_video : bool = True,
         video_transforms : t.Compose = None,
-        position_format : str = "graph_per_sequence"
+        position_format : str = "graph_per_sequence",
+        relative_positions: bool = False
         ) -> None:
         super().__init__()
 
@@ -237,7 +238,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
         # Nothing to do here (yet)
         pass
 
-def collate_function_builder(epsilon : int, load_frames : bool, mix_video : callable = None, position_format : str = "graph_per_sequence"):
+def collate_function_builder(epsilon : int, load_frames : bool, mix_video : callable = None, position_format : str = "graph_per_sequence", relative_positions: bool = False):
 
     def multimodal_collate(instances : list):
         """Collate function that batches both position data and video data.
@@ -270,9 +271,9 @@ def collate_function_builder(epsilon : int, load_frames : bool, mix_video : call
             elif isinstance(first_entry, PositionContainer):
                 # TODO Think about "batching" graphs per timestep!
                 if position_format == "graph_per_sequence":
-                    batch[k] = dgl.batch([instance[k].as_graph_per_sequence(epsilon) for instance in instances])
+                    batch[k] = dgl.batch([instance[k].as_graph_per_sequence(epsilon, relative_positions) for instance in instances])
                 if position_format == "flattened":
-                    batch[k] = torch.stack([instance[k].as_flattened(epsilon) for instance in instances])
+                    batch[k] = torch.stack([instance[k].as_flattened(epsilon, relative_positions) for instance in instances])
 
 
         r = torch.rand(1).item()

@@ -64,13 +64,7 @@ class PositionContainer:
         self.team_b = torch.Tensor(self.team_b)
         self.ball = torch.Tensor(self.ball)
 
-    def convert_relative_to_ball(self):
-        # TODO: This needs to be done after normalizing but before creating the graph
-        self.team_a = torch.linalg.norm(self.team_a - self.ball)
-        self.team_b = torch.linalg.norm(self.team_b - self.ball)
-
-
-    def as_graph_per_sequence(self, epsilon: int) -> dgl.DGLGraph:
+    def as_graph_per_sequence(self, epsilon: int, relative_positions: bool) -> dgl.DGLGraph:
         """Constructs a graph with flattened trajectory per player as node features.
         Nodes are connected within epsilon neighborhood or team membership if epsilon = 0.
 
@@ -103,6 +97,10 @@ class PositionContainer:
 
         positions[:, 1::3] /= 40  # court length
         positions[:, 2::3] /= 20  # court length
+        if relative_positions:
+            # subtract ball position from player positions except team indicator
+            positions[:-1, 1:] -= positions[-1, 1:]
+
         G.ndata["positions"] = positions
 
         G = dgl.add_self_loop(G)
@@ -181,7 +179,7 @@ class PositionContainer:
 
         return all_pos
 
-    def as_flattened(self, normalize=True) -> torch.Tensor:
+    def as_flattened(self, normalize=True, relative_positions: bool = False) -> torch.Tensor:
         """Returns the positions with separate dimension for Players (N) and positions over time (T*C).
         A team indicator per player is inserted at position 0.
 
@@ -196,6 +194,8 @@ class PositionContainer:
         if normalize:
             all_pos[:, 0::3] /= 40
             all_pos[:, 1::3] /= 20
+        if relative_positions:
+            all_pos[:-1] -= all_pos[-1]
 
         indicator = torch.concatenate([
             torch.zeros(7),
@@ -427,7 +427,7 @@ if __name__ == "__main__":
         a, b = torch.rand((16,7,3)), torch.ones((16,7,3)) 
         ball = torch.rand((16,1,3)) + 1
         pos = PositionContainer(a, b, ball)
-        print(pos.as_graph_per_timestep(7))
+        print(pos.as_graph_per_sequence(7, True))
         containers.append(pos)
 
     # batched_container = PositionContainer.from_multiple_containers(containers)
