@@ -12,8 +12,8 @@ trainer: # logger extra
   max_epochs: 100
   max_steps: -1
   max_time: null
-  limit_train_batches: 0.5 # set fraction of training data
-  limit_val_batches: 0.5
+  limit_train_batches: null # set fraction of training data
+  limit_val_batches: null
   limit_test_batches: null
   log_every_n_steps: 50
   accelerator: "gpu"
@@ -34,6 +34,7 @@ data:
     epsilon : 7
     mix_video: false
     position_format: "flattened"
+    relative_positions: false
   transforms: null
 
 model:
@@ -41,7 +42,7 @@ model:
   params:
     dim_in: 49
     dim_h: 256
-    #input_operation: "raw" TODO
+    input_operation: "linear"
     num_heads: 8
     use_head: true
 
@@ -49,7 +50,7 @@ model:
 lit_model:
   name: LitModel
 
-loss_func: weighted_cross_entropy
+loss_func: unweighted_cross_entropy
 
 optimizer:
   name: SGD
