@@ -144,3 +144,4 @@ dataset/means*
 dataset/std*
 models
 slurm*
+dataset/analysis
