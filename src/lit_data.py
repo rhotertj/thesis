@@ -226,13 +226,13 @@ class LitResampledHblDataset(pl.LightningDataModule):
         return DataLoader(self.data_train, batch_size=self.batch_size, num_workers=4, persistent_workers=True, pin_memory=True, shuffle=True, collate_fn=self.train_collate,)
 
     def val_dataloader(self):
-        return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, collate_fn=self.val_collate)
+        return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, shuffle=False, collate_fn=self.val_collate)
 
     def test_dataloader(self):
-        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=1, collate_fn=self.val_collate)
+        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=1, shuffle=False, collate_fn=self.val_collate)
 
     def predict_dataloader(self):
-        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=1, collate_fn=self.val_collate)
+        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=1, shuffle=False, collate_fn=self.val_collate)
 
     def teardown(self, stage: str) -> None:
         # Nothing to do here (yet)
