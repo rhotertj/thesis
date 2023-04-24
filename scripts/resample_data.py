@@ -10,7 +10,6 @@ from torch.utils.data import Dataset
 from sklearn.model_selection import train_test_split
 
 sys.path.append("/nfs/home/rhotertj/Code/thesis/src")
-from utils import generate_class_description_fine, generate_class_description_coarse
 from data.datasets import MultiModalHblDataset, ResampledHblDataset
 
 META_FILE = "meta30"
@@ -147,6 +146,68 @@ def balance_classes(overlap_df: pd.DataFrame, chunk_df: pd.DataFrame, background
     balanced_df.sort_values(by=["frame_idx"], inplace=True)
     balanced_df.reset_index(inplace=True, drop=True)
     return balanced_df
+
+
+def generate_class_description_fine(row):
+    pass_technique = {
+        "O":  None,
+        "A": "Schlagwurfpass",
+        "B": "Handgelenkspass",
+        "C": "Druckpass",
+        "D": "Rückhandpass",
+        "E": "Undefinierter Pass",
+        "X":  None
+    }
+    shot_technique = {
+        0: None,
+        1: "Sprungwurf Außen",
+        2: "Sprungwurf Rückraum",
+        3: "Sprungwurf Torraum/Zentrum",
+        4: "Standwurf mit Anlauf",
+        5: "Standwurf ohne Anlauf",
+        6: "Drehwurf",
+        7: "7-Meter",
+        8: "Undefinierter Wurf", 
+    }
+    if row["shot"] == None:
+        return "Background"
+    elif row["shot"] == "0" and row["pass"] in ("O", "X"):
+        return "Foul"
+    elif row["pass"] in ("O", "X"):
+        return shot_technique[int(row["shot"])]
+    elif row["shot"] == "0":
+        return pass_technique[row["pass"]]
+    else:
+        print("error at", row["pass"], row["shot"], row["label"], type(row["pass"]), type(row["shot"]))
+
+def generate_class_description_coarse(fine_class):
+    pass_technique = {
+    "O":  None,
+    "A": "Schlagwurfpass",
+    "B": "Handgelenkspass",
+    "C": "Druckpass",
+    "D": "Rückhandpass",
+    "E": "Undefinierter Pass",
+    "X":  None
+    }
+    shot_technique = {
+        0: None, # zero
+        1: "Sprungwurf Außen",
+        2: "Sprungwurf Rückraum",
+        3: "Sprungwurf Torraum/Zentrum",
+        4: "Standwurf mit Anlauf",
+        5: "Standwurf ohne Anlauf",
+        6: "Drehwurf",
+        7: "7-Meter",
+        8: "Undefinierter Wurf", 
+    }
+    if fine_class in pass_technique.values():
+        return "Pass"
+    if fine_class in shot_technique.values():
+        return "Shot"
+    else:
+        return fine_class # Background and Foul
+
 
 
 if "__main__" == __name__:
