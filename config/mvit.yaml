@@ -58,7 +58,7 @@ data:
 model:
   name: make_kinetics_mvit
   params:
-    pretrained_path: "models/mvit_b_16x4.pt"
+    pretrained_path: "/nfs/home/rhotertj/Code/thesis/models/mvit_b_16x4.pt"
     head_type: "classify"
 
 lit_model:
