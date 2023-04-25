@@ -32,7 +32,7 @@ data:
     load_frames: false
     batch_size: 16
     mix_video: false
-    epsilon : 7
+    epsilon : 0
     position_format: graph_per_sequence
     relative_positions: false
   transforms: null
@@ -42,6 +42,7 @@ model:
   params:
     dim_in: 49
     dim_h: 256
+    num_layers: 5
     readout: "mean"
     input_operation: "linear"
     num_heads: 8

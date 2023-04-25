@@ -1,6 +1,8 @@
 import torch
+import torch.nn.functional as F
 from pytorchvideo.models.vision_transformers import create_multiscale_vision_transformers
 from pytorchvideo.models.head import create_vit_basic_head, SequencePool
+from heads import MViTTwinHead
 
 def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str, batch_size : int):
     spatial_size = 224
@@ -26,11 +28,11 @@ def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str
     model.load_state_dict(ckpt["model_state"], strict=False) # allow different head
 
     
-    if head_type == "classify":
-        zeros = torch.zeros(1, 3, 16, 224, 224)
-        y = model(zeros)
-        out_dim = y.shape[-1]
+    zeros = torch.zeros(1, 3, 16, 224, 224)
+    y = model(zeros)
+    out_dim = y.shape[-1]
 
+    if head_type == "classify":
         new_head = create_vit_basic_head(
                 in_features=out_dim,
                 out_features=num_classes,
@@ -40,6 +42,13 @@ def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str
             )
     elif head_type == "pool":
         new_head = SequencePool("cls")
+    elif head_type == "twin":
+        new_head = MViTTwinHead(
+            dim_in=out_dim,
+            num_classes=num_classes,
+            activation=F.relu,
+            dropout=0.4
+        )
     else:
         raise NotImplementedError(f"Unknown head type {head_type}")
     model.head = new_head

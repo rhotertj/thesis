@@ -8,6 +8,7 @@ import itertools
 import numpy as np
 from data.data_utils import create_graph
 from heads import create_default_head
+from pooling import MeanPool
 
 class GAT(torch.nn.Module):
 
@@ -18,6 +19,7 @@ class GAT(torch.nn.Module):
         num_classes: int,
         input_operation: str,
         batch_size : int,
+        num_layers: 5,
         readout: str = "mean",
         num_heads: int = 8,
         use_head: bool = True,
@@ -28,33 +30,36 @@ class GAT(torch.nn.Module):
             dim_in (int): Input dimension.
             dim_h (int): Hidden dimension.
             num_classes (int): Number of classes to classify.
-            input_embedding (str): Operation to apply before graph layers. Can be one of "linear", "raw", "conv", "conv+linear", "conv->linear".
+            input_operation (str): Operation to apply before graph layers. Can be one of "linear", "raw", "conv", "conv+linear", "conv->linear".
+            batch_size (int): Batch size used for training. This is relevant to correctly size input layer.
+            num_layers (int): Number of GAT layers.
             readout (str, optional): Readout operation. Can be "sum", "min", "mean" and "max". Defaults to "mean".
-            heads (int, optional): Number of attention heads. Defaults to 8.
+            num_heads (int, optional): Number of attention heads. Defaults to 8.
+            use_head (bool): Whether to use the head for classification or just return the graph representation. Defaults to True.
         """    	
         super().__init__()
         self.use_head = use_head
+        self.mean_pool = MeanPool(dim=1)
 
-        # self.input_layer = torch.nn.Linear(dim_in, dim_h)
-        # self.gat1 = GATv2Conv(dim_h, dim_h, num_heads=num_heads, feat_drop=0.4)
         self.input_layer = InputLayer(dim_in=dim_in, dim_h=dim_h, op=input_operation, batch_size=batch_size)
-        self.gat1 = GATv2Conv(self.input_layer.get_output_size(), dim_h, num_heads=num_heads, feat_drop=0.4)
-        self.gat2 = GATv2Conv(dim_h, dim_h, num_heads=num_heads)
+        self.gat_layers = [GATv2Conv(self.input_layer.get_output_size(), dim_h, num_heads=num_heads, feat_drop=0.4)]
+
+        for _ in range(num_layers):
+            gat_layer = GATv2Conv(dim_h, dim_h, num_heads=num_heads, activation=F.leaky_relu)
+            self.gat_layers.append(gat_layer)
+            
+        self.gat_layers = nn.ModuleList(self.gat_layers)
         self.readout = readout
         self.relu = torch.nn.ReLU()
         self.head = create_default_head(input_dim=dim_h, output_dim=num_classes, activation=self.relu, dropout=0.3)
         
 
     def forward(self, g, g_feats):
-        # graph attention
-        # g_feats = self.input_layer(g_feats)
         h = self.input_layer(g_feats)
-        h = self.gat1(g, h)
-        # average heads
-        h = torch.mean(h, dim=1)
-        h = self.relu(h)
-        h = self.gat2(g, h)
-        h = torch.mean(h, dim=1)
+        # graph attention
+        for layer in self.gat_layers:
+            h = layer(g, h)
+            h = self.mean_pool(h)
         # readout function (handles batched graph)
         g.ndata["h"] = h
         h = dgl.readout_nodes(g, "h", op=self.readout)

@@ -17,7 +17,7 @@ from torchvision import transforms as t
 import video_transforms as vt
 import pytorchvideo.transforms as ptvt
 
-from lit_models import LitModel, weighted_cross_entropy, unweighted_cross_entropy
+from lit_models import LitModel, weighted_cross_entropy, unweighted_cross_entropy, twin_head_loss
 from video_models import make_kinetics_mvit
 from graph_models import GAT, PositionTransformer, GIN
 from multimodal_models import MultiModalModel
@@ -144,7 +144,7 @@ def main(conf):
 
 
 if "__main__" == __name__:
-    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser = argparse.ArgumentParser(description='Run pytorch lightning pipeline according to configuration.')
     parser.add_argument("-f", "--file", type=str, help='File that contains configuration of models, task and data.')
     parser.add_argument('-c', "--config", type=str, nargs="*", help='Overwrite config parameters of given file', required=False)
 

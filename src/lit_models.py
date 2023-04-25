@@ -8,7 +8,6 @@ import numpy as np
 import seaborn as sns
 import itertools
 
-from utils import draw_trajectory, plot_confmat
 from video_models import make_kinetics_mvit
 from graph_models import GAT, PositionTransformer, GIN
 from multimodal_models import MultiModalModel
@@ -60,18 +59,21 @@ class LitModel(pl.LightningModule):
         elif isinstance(self.model, PositionTransformer):
             positions = input["positions"]
             return self.model(positions)
-        elif isinstance(self.model, MultiModalModel):
+        else:# isinstance(self.model, MultiModalModel):
             return self.model(input)
-        else:
-            raise NotImplementedError(f"Unknown model type {type(self.model)}")
+        # else:
+        #     raise NotImplementedError(f"Unknown model type {type(self.model)}")
 
     def training_step(self, batch, batch_idx):
         targets = batch["label"]
         offsets = batch["label_offset"]
         y = self.forward(batch)
+        if isinstance(y, tuple):
+            y, y_reg = y
+            loss = self.loss_func(y, y_reg, targets, offsets)
+        else:
+            loss = self.loss_func(y, targets, offsets)
 
-        # loss = self.loss(y, targets)
-        loss = self.loss_func(y, targets, offsets)
         self.log("train/batch_loss", loss)
         self.train_loss.append(loss.detach().cpu().item())
 
@@ -109,8 +111,12 @@ class LitModel(pl.LightningModule):
         targets = batch["label"]
         offsets = batch["label_offset"]
         y = self.forward(batch)
-        # loss = self.loss(y, targets)
-        loss = self.loss_func(y, targets, offsets)
+
+        if isinstance(y, tuple):
+            y, y_reg = y
+            loss = self.loss_func(y, y_reg, targets, offsets)
+        else:
+            loss = self.loss_func(y, targets, offsets)
         self.log("val/batch_loss", loss.mean())
 
         self.val_accuracy.update(y, targets)
@@ -190,3 +196,9 @@ def weighted_cross_entropy(batch_y: torch.Tensor, batch_gt: torch.Tensor, batch_
         if o > 0:
             batch_losses[i] *= 1 / o
     return batch_losses.mean()
+
+def twin_head_loss(batch_cls: torch.Tensor, batch_reg: torch.Tensor, batch_gt: torch.Tensor, batch_label_offsets: torch.Tensor):
+    cls_loss = torch.nn.functional.cross_entropy(batch_cls, batch_gt, label_smoothing=0.1)
+    reg_loss = torch.nn.functional.huber_loss(batch_reg.squeeze(1), batch_label_offsets.float())
+    sigma = 0.8
+    return cls_loss + (sigma * reg_loss)
