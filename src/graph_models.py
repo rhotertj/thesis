@@ -1,13 +1,13 @@
 import torch
 import torch.nn as nn
-from dgl.nn import GATv2Conv
+from dgl.nn import GATv2Conv, GraphConv
 import dgl
 import torch.nn.functional as F
 import networkx as nx
 import itertools
 import numpy as np
 from data.data_utils import create_graph
-from heads import create_default_head
+from heads import create_default_head, BasicTwinHead
 from pooling import MeanPool
 
 class GAT(torch.nn.Module):
@@ -68,7 +68,6 @@ class GAT(torch.nn.Module):
             h = self.head(h)
             h = h.softmax(-1)
         return h
-
 
 class GIN_MLP(nn.Module):
     """Construct two-layer MLP-type aggreator for GIN model"""
@@ -139,7 +138,6 @@ class GIN(nn.Module):
             score_over_layer += self.drop(self.linear_prediction[i](pooled_h))
         return score_over_layer
 
-
 class PositionTransformer(torch.nn.Module):
     
     def __init__(
@@ -168,6 +166,54 @@ class PositionTransformer(torch.nn.Module):
         if self.use_head:
             y = self.head(y)
         return y
+
+class GCN(torch.nn.Module):
+
+    def __init__(
+        self,
+        dim_in: int,
+        dim_h: int,
+        num_classes: int,
+        input_operation: str,
+        batch_size : int,
+        readout: str = "mean",
+        num_heads: int = 8,
+        use_head: bool = True,
+    ) -> None:
+        super().__init__()
+        self.use_head = use_head
+        self.readout = readout
+        # note that batch size actually denotes sequence length
+        self.input_layer = InputLayer(dim_in=dim_in, dim_h=dim_h, op=input_operation, batch_size=1)
+        self.gcn1 = GraphConv(
+            in_feats=self.input_layer.get_output_size(),
+            out_feats=dim_h
+        )
+        self.gcn2 = GraphConv(
+            in_feats=dim_h,
+            out_feats=dim_h
+        )
+        layer = torch.nn.TransformerEncoderLayer(d_model=dim_h, nhead=num_heads)
+        self.transformer = torch.nn.TransformerEncoder(layer, num_layers=2)
+        self.head = create_default_head(dim_h, num_classes, F.relu, 0.3)
+
+    def forward(self, g, g_feats, edge_weights=None):
+        # NOTE: This function uses a batched graph for one sequence, one graph per timestep.
+        h = self.input_layer(g_feats)
+
+        h = self.gcn1(g, h, edge_weight=edge_weights)
+        h = self.gcn2(g, h, edge_weight=edge_weights)
+
+        g.ndata["h"] = h
+        h = dgl.readout_nodes(g, "h", op=self.readout)
+
+        g_repr = self.transformer(h)
+        g_repr = h.mean(dim=0)
+
+        if not self.use_head:
+            return g_repr
+        return self.head(g_repr).unsqueeze(0) # unsqueeze for cross entropy loss
+        
 
 
 class InputLayer(torch.nn.Module):

@@ -269,11 +269,12 @@ def collate_function_builder(epsilon : int, load_frames : bool, mix_video : call
                 batch[k] = torch.tensor([instance[k] for instance in instances])
 
             elif isinstance(first_entry, PositionContainer):
-                # TODO Think about "batching" graphs per timestep!
                 if position_format == "graph_per_sequence":
                     batch[k] = dgl.batch([instance[k].as_graph_per_sequence(epsilon, relative_positions) for instance in instances])
                 if position_format == "flattened":
                     batch[k] = torch.stack([instance[k].as_flattened(epsilon, relative_positions) for instance in instances])
+                if position_format == "graph_per_timestep":
+                    batch[k] = dgl.batch(instances[0][k].as_graph_per_timestep(epsilon))
 
 
         r = torch.rand(1).item()

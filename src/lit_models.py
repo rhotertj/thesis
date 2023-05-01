@@ -9,7 +9,7 @@ import seaborn as sns
 import itertools
 
 from video_models import make_kinetics_mvit
-from graph_models import GAT, PositionTransformer, GIN
+from graph_models import GAT, PositionTransformer, GIN, GCN
 from multimodal_models import MultiModalModel
 
 from data.labels import LabelDecoder
@@ -56,6 +56,9 @@ class LitModel(pl.LightningModule):
         elif isinstance(self.model, (GAT, GIN)):
             positions = input["positions"]
             return self.model(positions, positions.ndata["positions"])
+        elif isinstance(self.model, GCN):
+            positions = input["positions"]
+            return self.model(positions, positions.ndata["positions"], positions.edata["w"])
         elif isinstance(self.model, PositionTransformer):
             positions = input["positions"]
             return self.model(positions)
@@ -68,6 +71,7 @@ class LitModel(pl.LightningModule):
         targets = batch["label"]
         offsets = batch["label_offset"]
         y = self.forward(batch)
+
         if isinstance(y, tuple):
             y, y_reg = y
             loss = self.loss_func(y, y_reg, targets, offsets)

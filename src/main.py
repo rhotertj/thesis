@@ -19,7 +19,7 @@ import pytorchvideo.transforms as ptvt
 
 from lit_models import LitModel, weighted_cross_entropy, unweighted_cross_entropy, twin_head_loss
 from video_models import make_kinetics_mvit
-from graph_models import GAT, PositionTransformer, GIN
+from graph_models import GAT, PositionTransformer, GIN, GCN
 from multimodal_models import MultiModalModel
 from lit_data import LitMultiModalHblDataset, LitResampledHblDataset
 from data.labels import LabelDecoder
