@@ -7,11 +7,13 @@ from torchvision.transforms.functional import center_crop
 import numpy as np
 import seaborn as sns
 import itertools
+import pickle as pkl
 
 from video_models import make_kinetics_mvit
 from graph_models import GAT, PositionTransformer, GIN, GCN
 from multimodal_models import MultiModalModel
 
+from metrics import average_mAP, postprocess_predictions
 from data.labels import LabelDecoder
 
 
@@ -29,7 +31,7 @@ class LitModel(pl.LightningModule):
         num_classes = label_mapping.num_classes
         self.model = model
 
-        wandb.watch(self.model)
+        #wandb.watch(self.model)
 
         self.loss_func = loss_func
         self.scheduler = scheduler
@@ -46,6 +48,13 @@ class LitModel(pl.LightningModule):
         self.ground_truths = []
         self.predictions = []
         self.confidences = []
+        self.pred_frame_idx = []
+        self.pred_match_number = []
+
+        self.ground_truth_anchors = []
+        self.ground_truth_anchors_label = []
+        self.ground_truth_anchors_match_number = []
+
         self.val_loss = []
         self.train_loss = []
 
@@ -62,10 +71,11 @@ class LitModel(pl.LightningModule):
         elif isinstance(self.model, PositionTransformer):
             positions = input["positions"]
             return self.model(positions)
-        else:# isinstance(self.model, MultiModalModel):
+        elif isinstance(self.model, MultiModalModel):
             return self.model(input)
-        # else:
-        #     raise NotImplementedError(f"Unknown model type {type(self.model)}")
+        else:
+           print(f"Unknown model type {type(self.model)}")
+           return self.model(input)
 
     def training_step(self, batch, batch_idx):
         targets = batch["label"]
@@ -114,6 +124,8 @@ class LitModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         targets = batch["label"]
         offsets = batch["label_offset"]
+        match_numbers = batch["match_number"]
+        frame_indices = batch["frame_idx"]
         y = self.forward(batch)
 
         if isinstance(y, tuple):
@@ -127,11 +139,19 @@ class LitModel(pl.LightningModule):
         self.weighted_val_accuracy.update(y, targets)
         preds = y.detach().cpu()
 
-        # save prediction and ground truth for validation metrics
+        # save for validation metrics
         for b in range(len(targets)):
+            # all predictions for PR curve and confmat, frame_idx for post_processing
             self.predictions.append(preds[b].argmax().item())
             self.confidences.append(preds[b])
             self.ground_truths.append(targets[b].detach().cpu().item())
+            self.pred_frame_idx.append(frame_indices[b].cpu().item())
+            self.pred_match_number.append(match_numbers[b].cpu().item())
+            # gather ground truth for instances with annotated actions at pos 0.
+            if offsets[b] == 0: # this includes background predictions, they will be discarded later 
+                self.ground_truth_anchors.append(frame_indices[b].cpu().item())
+                self.ground_truth_anchors_match_number.append(match_numbers[b].cpu().item())
+                self.ground_truth_anchors_label.append(targets[b].detach().cpu().item())
         self.val_loss.append(loss.detach().cpu().item())
 
     def on_validation_epoch_end(self) -> None:
@@ -162,6 +182,45 @@ class LitModel(pl.LightningModule):
         )
 
         wandb.log({"val/prec_rec": pr})
+
+        # offset ground truth anchor positions to avoid collisions across matches
+        max_frame_magnitude = len(str(max(self.ground_truth_anchors)))
+        frame_offset = 10**(max_frame_magnitude + 1)
+
+        gt_match_number = np.array(self.ground_truth_anchors_match_number)
+        gt_anchor = np.array(self.ground_truth_anchors)
+        gt_anchor = gt_anchor + frame_offset * gt_match_number
+        gt_label = np.array(self.ground_truth_anchors_label)
+
+        # offset frames for predictions as well
+        pred_frame_idx = np.array(self.pred_frame_idx)
+        match_number = np.array(self.pred_match_number)
+        confidences = confidences.numpy()
+
+        max_frame_magnitude = len(str(max(self.pred_frame_idx)))
+        frame_offset = 10**(max_frame_magnitude + 1)
+
+        altered_frames = pred_frame_idx + frame_offset * match_number
+        correct_order = np.argsort(altered_frames)
+        altered_frames = altered_frames[correct_order]
+        confidences = confidences[correct_order]
+
+        pred_anchors, pred_confidences = postprocess_predictions(confidences, altered_frames)
+
+        for var, name in zip([pred_confidences, pred_anchors, gt_label, gt_anchor], ["litmodel_confs", "litmodel_pred_anchors", "litmodel_gt_label", "litmodel_gt_anhors"]):
+            with open(name+".pkl", "wb+") as f:
+                pkl.dump(var, f)
+
+        fps = 29.97
+        tolerances = [fps * i for i in range(1,6)]
+        map_per_tolerance = average_mAP(pred_confidences, pred_anchors, gt_label, gt_anchor, tolerances=tolerances)
+
+        data = [[sec, m] for (sec, m) in zip(range(1,6), map_per_tolerance)]
+        table = wandb.Table(data=data, columns = ["seconds", "mAP"])
+        wandb.log(
+            {"val/average-mAP" : wandb.plot.line(table, "seconds", "mAP", title=f"mAP at different tolerances (a-mAP={np.mean(map_per_tolerance):.2})")}
+        )
+
 
     def configure_optimizers(self):
         if self.scheduler is None:
