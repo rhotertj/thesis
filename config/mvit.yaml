@@ -82,11 +82,18 @@ save_config: true
 log_proportions: true
 
 callbacks:
-  checkpointing:
-    every_n: 1
-    dir: experiments/mvit/train
-  early_stopping:
-    monitor: "val/acc"
-    patience: 3
-    mode: max
-    check_on_train_epoch_end: True
+  - name: ModelCheckpoint
+    params:
+      every_n_epochs: 1
+      dirpath: experiments/mvit/train
+      filename: "{epoch}-{val_acc:.2f}"
+      monitor: "val/acc"
+      mode: max
+      save_top_k: 2
+      save_on_train_epoch_end: false # save end of val
+  - name: EarlyStopping
+    params:
+      monitor: "val/acc"
+      patience: 3
+      mode: max
+      check_on_train_epoch_end: True

@@ -5,6 +5,7 @@ from pathlib import Path
 from omegaconf import OmegaConf as omcon
 import argparse
 
+import torch
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -28,6 +29,7 @@ from utils import get_proportions_df
 
 def main(conf):
     pl.seed_everything(conf.seed_everything)
+    torch.set_float32_matmul_precision("high")
 
     logger = WandbLogger(
         **conf.logger,
@@ -86,7 +88,7 @@ def main(conf):
     callbacks = []
 
     # create experiment directory
-    exp_dir = Path(conf.callbacks.checkpointing.dir)
+    exp_dir = Path([cb.params.dirpath for cb in conf.callbacks if cb.name == "ModelCheckpoint"][0])
     # previous_experiments = [f for f in os.listdir(exp_dir) if os.path.isdir(exp_dir / f)]
     # next_dir = str(len(previous_experiments) + 1)
     exp_dir = exp_dir / experiment_name
@@ -96,19 +98,9 @@ def main(conf):
         with open(exp_dir/"config.yaml", "w+") as f:
             f.write(omcon.to_yaml(conf))
 
-
-    checkpoint_cb = ModelCheckpoint(
-        dirpath=exp_dir,
-        every_n_epochs=conf.callbacks.checkpointing.every_n,
-    )
-
-    callbacks.append(checkpoint_cb)
-
-    earlystopping_cb = EarlyStopping(
-        **conf.callbacks.early_stopping,
-    )
-
-    callbacks.append(earlystopping_cb)
+    for callback in conf.callbacks:
+        cb = eval(callback.name)(**callback.params)
+        callbacks.append(cb)
 
     trainer = pl.Trainer(
         logger=logger,
