@@ -36,6 +36,10 @@ class PositionContainer:
         self._preprocess_data()
         self.T = self.team_a.shape[-3]
         self.N = 15
+        self.max_dist = 44.8 # pythagoras, diagonal of court size 40x20
+
+    def __repr__(self) -> str:
+        return f"Position Container for {self.T} time steps ({self.mirror_horizontal=}, {self.mirror_vertical=})"
 
     def _preprocess_data(self):
         """Truncate or pad teams to size 7, mirror positions if needed. 
@@ -54,6 +58,7 @@ class PositionContainer:
             vertical=self.mirror_vertical,
             horizontal=self.mirror_horizontal,
         )
+    
         self.ball = mirror_positions_tn3(
             self.ball,
             vertical=self.mirror_vertical,
@@ -121,14 +126,15 @@ class PositionContainer:
         for t in range(positions.shape[0]):
             G = dgl.graph([]).to(positions.device)
             G = dgl.add_nodes(G, 15)
-
+            
             if epsilon > 0:
                 # create edges wrt eps nbhood
                 for a1, a2 in itertools.combinations(range(15), r=2):
                     # team indicator is a position 0
                     dist = torch.linalg.norm(positions[t, a1, 1:3] - positions[t, a2, 1:3])
                     if dist < epsilon:
-                        G = dgl.add_edges(G, [a1, a2], [a2, a1])
+                        rel_dist = dist / self.max_dist
+                        G = dgl.add_edges(G, [a1, a2], [a2, a1], data={"w" : torch.Tensor([rel_dist, rel_dist])})
             else:
                 # create edges wrt team membership
                 for a1, a2 in itertools.combinations(range(15), r=2):
@@ -143,7 +149,6 @@ class PositionContainer:
             positions[t, :, 1] /= 40  # court length
             positions[t, :, 2] /= 20  # court length
             G.ndata["positions"] = positions[t]
-            print(positions[t].shape)
 
             G = dgl.add_self_loop(G)
             graphs.append(G)
@@ -356,25 +361,32 @@ def mirror_positions(
 
     return positions
 
-
-def check_label_within_slice(window_idx, index, sampling_rate):
-    """Checks whether an annotation exists for the current window slice that gets overlooked
-    because the sampling rate is bigger than 1.
+def check_label_within_slice(start, stop, events, center_idx, sampling_rate):
+    """Checks whether an annotation exists for the current window slice.
 
     Args:
-        window_idx (int): The current index.
-        events (pd.Index): Frame numbers that portray an action.
-        sampling_range (int): The sampling rate.
+        start (int): First frame number of the window slice.
+        stop (int): Last frame number of the window slice.
+        events (pd.DataFrame): The event dataframe.
+        center_idx (int): Frame number of the center frame of the window.
+        sampling_rate (int): The sampling rate.
 
     Returns:
         idx (int): The frame number of the event in the current window slice.
     """
-    if sampling_rate == 1:
-        return False
-    # Resample the entire range with sampling rate 1
-    for idx in range(window_idx, window_idx + sampling_rate):
-        if idx in index:
-            return idx
+    label_idx = -1
+    for idx in range(start, stop):
+        if idx in events.index:
+            label_idx = idx
+            break
+
+    if  label_idx == -1:
+        label, label_offset = {}, 0
+    else:
+        label = events.loc[label_idx].labels
+        label_offset = (label_idx - center_idx) // sampling_rate
+            
+    return label, label_offset
 
 
 def get_index_offset(boundaries, idx2frame, idx):

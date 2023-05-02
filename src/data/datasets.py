@@ -169,17 +169,11 @@ class MultiModalHblDataset(Dataset):
 
         # Iterate over window, load frames and check for event
         half_range = self.seq_half * self.sampling_rate
+        label, label_offset = check_label_within_slice(frame_idx - half_range, frame_idx + half_range, events, frame_idx, self.sampling_rate)
+        label = self.label_mapping(label)
+
         for window_idx in range(frame_idx - half_range, frame_idx + half_range, self.sampling_rate):
             window_indices.append(window_idx)
-            if window_idx in events.index:
-                label = events.loc[window_idx].labels
-                label_offset = ((window_idx - frame_idx) + half_range) // self.sampling_rate
-            # Check whether we missed an annotation because of a higher sampling rate
-            else:
-                label_idx = check_label_within_slice(window_idx, events.index, self.sampling_rate)
-                if label_idx:
-                    label = events.loc[label_idx].labels
-                    label_offset = ((window_idx - frame_idx) + half_range) // self.sampling_rate
 
             if self.load_frames:
                 frame_path = str(frame_base_path / f"{str(window_idx).rjust(6, '0')}.jpg")
@@ -275,6 +269,7 @@ class ResampledHblDataset(Dataset):
         load_frames: bool = True,
         transforms: Union[None, Compose] = None,
         label_mapping: callable = lambda x: x,
+        label_tolerances: list = [8, 16, 24],
     ):
         """
         This dataset provides a number of video frames (determined by seq_len) and
@@ -304,6 +299,7 @@ class ResampledHblDataset(Dataset):
         self.sampling_rate = sampling_rate
         self.transforms = transforms
         self.label_mapping = label_mapping
+        self.label_tolarances = label_tolerances
 
         print("Read", meta_path)
         self.meta_df = pd.read_csv(meta_path)
@@ -387,20 +383,14 @@ class ResampledHblDataset(Dataset):
         label = {}  # Default to 'background' action
         label_offset = 0  # Which frame of the window is portraying the action
 
-        # Iterate over window, load frames and check for event
         half_range = self.seq_half * self.sampling_rate
+        label, label_offset = check_label_within_slice(frame_idx - half_range, frame_idx + half_range, events, frame_idx, self.sampling_rate)
+        label = self.label_mapping(label)
+
+        # Iterate over window, load frames and check for event
         for window_idx in range(frame_idx - half_range, frame_idx + half_range, self.sampling_rate):
             window_indices.append(window_idx)
-            if window_idx in events.index:
-                label = events.loc[window_idx].labels
-                label_offset = (window_idx - frame_idx) // self.sampling_rate
-            # Check whether we missed an annotation because of a higher sampling rate
-            else:
-                label_idx = check_label_within_slice(window_idx, events.index, self.sampling_rate)
-                if label_idx:
-                    label = events.loc[label_idx].labels
-                    label_offset = (window_idx - frame_idx) // self.sampling_rate
-
+            
             if self.load_frames:
                 frame_path = str(frame_base_path / f"{str(window_idx).rjust(6, '0')}.jpg")
                 frame = cv2.imread(frame_path, cv2.IMREAD_COLOR)
@@ -423,18 +413,6 @@ class ResampledHblDataset(Dataset):
         team_b_pos = team_b_pos[position_slice]
         ball_pos = ball_pos[position_slice]
 
-        # team_a_pos, team_b_pos = ensure_correct_team_size(team_a_pos, team_b_pos)
-
-        # teams_pos = combine_teams_with_indicator(team_a_pos, team_b_pos)
-        # ball_pos = combine_ball_with_indicator(ball_pos)
-
-        # all_pos = np.vstack([teams_pos, ball_pos])
-
-        # all_pos = mirror_positions(
-        #     all_pos,
-        #     vertical=self.mirror_vertical[match_number],
-        #     horizontal=self.mirror_horizontal[match_number],
-        # )
         positions = PositionContainer(
             team_a=team_a_pos,
             team_b=team_b_pos,
@@ -442,8 +420,6 @@ class ResampledHblDataset(Dataset):
             mirror_horizontal=self.mirror_horizontal[match_number],
             mirror_vertical=self.mirror_vertical[match_number],
         )
-
-        label = self.label_mapping(label)
 
         instance = {
             "frames": frames,
