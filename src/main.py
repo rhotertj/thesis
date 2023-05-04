@@ -80,27 +80,33 @@ def main(conf):
     lit_data.setup(conf.stage)
 
     if conf.log_proportions:
-        train_df = get_proportions_df(lit_data.data_train, label_decoder, conf.num_classes)
-        val_df = get_proportions_df(lit_data.data_val, label_decoder, conf.num_classes)
-        logger.log_table("train/classes", data=train_df)
-        logger.log_table("val/classes", data=val_df)
-    
+        if hasattr(lit_data, "data_train"):
+            train_df = get_proportions_df(lit_data.data_train, label_decoder, conf.num_classes)
+            logger.log_table("train/classes", data=train_df)
+        if hasattr(lit_data, "data_val"):
+            val_df = get_proportions_df(lit_data.data_val, label_decoder, conf.num_classes)
+            logger.log_table("val/classes", data=val_df)
+        if hasattr(lit_data, "data_test"):
+            test_df = get_proportions_df(lit_data.data_test, label_decoder, conf.num_classes)
+            logger.log_table("test/classes", data=test_df)
+        
+        
     callbacks = []
+    for callback in conf.callbacks:
+        if callback.name == "ModelCheckpoint":
+            exp_dir = callback.params.dirpath
+            exp_dir = Path(exp_dir) / experiment_name
+            callback.params.dirpath = exp_dir.resolve()
+        cb = eval(callback.name)(**callback.params)
+        callbacks.append(cb)
 
-    # create experiment directory
-    exp_dir = Path([cb.params.dirpath for cb in conf.callbacks if cb.name == "ModelCheckpoint"][0])
-    # previous_experiments = [f for f in os.listdir(exp_dir) if os.path.isdir(exp_dir / f)]
-    # next_dir = str(len(previous_experiments) + 1)
-    exp_dir = exp_dir / experiment_name
+    # create experiment dir and save config
     os.makedirs(exp_dir, exist_ok=True) # allow overwrite, useful for manually set expnames
 
     if conf.save_config:
         with open(exp_dir/"config.yaml", "w+") as f:
             f.write(omcon.to_yaml(conf))
-
-    for callback in conf.callbacks:
-        cb = eval(callback.name)(**callback.params)
-        callbacks.append(cb)
+    
 
     trainer = pl.Trainer(
         logger=logger,
