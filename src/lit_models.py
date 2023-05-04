@@ -117,6 +117,11 @@ class LitModel(pl.LightningModule):
         self.ground_truths.clear()
         self.predictions.clear()
         self.confidences.clear()
+        self.pred_frame_idx.clear()
+        self.pred_match_number.clear()
+        self.ground_truth_anchors.clear()
+        self.ground_truth_anchors_label.clear()
+        self.ground_truth_anchors_match_number.clear()
         self.val_loss.clear()
         self.weighted_val_accuracy.reset()
         self.val_accuracy.reset()
@@ -202,6 +207,7 @@ class LitModel(pl.LightningModule):
 
         altered_frames = pred_frame_idx + frame_offset * match_number
         correct_order = np.argsort(altered_frames)
+        print(len(altered_frames), len(confidences), len(correct_order))
         altered_frames = altered_frames[correct_order]
         confidences = confidences[correct_order]
 
