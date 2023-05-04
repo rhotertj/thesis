@@ -44,13 +44,13 @@ model:
     dim_h: 256
     input_operation: "linear"
     num_heads: 8
-    use_head: true
+    head_type: twin
 
 
 lit_model:
   name: LitModel
 
-loss_func: unweighted_cross_entropy
+loss_func: twin_head_loss
 
 optimizer:
   name: SGD
@@ -67,12 +67,21 @@ checkpoint: null
 save_config: true
 log_proportions: true
 
+
 callbacks:
-  checkpointing:
-    every_n: 1
-    dir: experiments/gat/train
-  early_stopping:
-    monitor: "train/epoch_loss"
-    patience: 100
-    mode: min
-    check_on_train_epoch_end: True
+  - name: ModelCheckpoint
+    params:
+      every_n_epochs: 1
+      dirpath: experiments/posT/train
+      filename: "{epoch}-{val/acc:.2f}"
+      auto_insert_metric_name: False
+      monitor: "val/acc"
+      mode: max
+      save_top_k: 2
+      save_on_train_epoch_end: false # save end of val
+  - name: EarlyStopping
+    params:
+      monitor: "val/acc"
+      patience: 5
+      mode: max
+      check_on_train_epoch_end: True

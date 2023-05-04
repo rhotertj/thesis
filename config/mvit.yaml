@@ -59,12 +59,12 @@ model:
   name: make_kinetics_mvit
   params:
     pretrained_path: "/nfs/home/rhotertj/Code/thesis/models/mvit_b_16x4.pt"
-    head_type: "classify"
+    head_type: "twin"
 
 lit_model:
   name: LitModel
 
-loss_func: unweighted_cross_entropy
+loss_func: twin_head_loss
 
 optimizer:
   name: SGD
@@ -86,7 +86,8 @@ callbacks:
     params:
       every_n_epochs: 1
       dirpath: experiments/mvit/train
-      filename: "{epoch}-{val_acc:.2f}"
+      filename: "{epoch}-{val/acc:.2f}"
+      auto_insert_metric_name: False
       monitor: "val/acc"
       mode: max
       save_top_k: 2

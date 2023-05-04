@@ -2,7 +2,7 @@ import torch
 
 from video_models import make_kinetics_mvit
 from graph_models import GAT, GIN, PositionTransformer
-from heads import create_default_head
+from heads import create_default_head, BasicTwinHead
 
 class MultiModalModel(torch.nn.Module):
 
@@ -14,6 +14,7 @@ class MultiModalModel(torch.nn.Module):
         graph_model_params : dict,
         num_classes: int,
         batch_size: int,
+        head_type: str,
         train_head_only: bool,
         graph_model_ckpt: str = "",
         video_model_ckpt: str = "",
@@ -28,15 +29,24 @@ class MultiModalModel(torch.nn.Module):
         self.graph_model = eval(graph_model_name)(
             num_classes=num_classes,
             batch_size=batch_size,
-            use_head=False,
+            head_type="pool",
             **graph_model_params
         )
-        self.head = create_default_head(
-            input_dim=graph_model_params["dim_h"] + 768, # mvit hidden dim
-            output_dim=num_classes,
-            activation=torch.nn.ReLU(),
-            dropout=0.3
-        )
+
+        if head_type == "basic":
+            self.head = create_default_head(
+                input_dim=graph_model_params["dim_h"] + 768, # mvit hidden dim
+                output_dim=num_classes,
+                activation=torch.nn.ReLU(),
+                dropout=0.3
+            )
+        elif head_type == "twin":
+            self.head = BasicTwinHead(
+                dim_in=graph_model_params["dim_h"] + 768,
+                num_classes=num_classes,
+                activation=torch.nn.ReLU(),
+                dropout=0.3
+            )
 
         if not graph_model_ckpt == "":
             self.load_graph_model_from_ckpt(graph_model_ckpt)

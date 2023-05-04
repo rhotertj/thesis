@@ -148,22 +148,26 @@ class PositionTransformer(torch.nn.Module):
         input_operation : str,
         batch_size : int,
         num_heads: int = 8,
-        use_head: bool = True,
+        head_type: str = "classify",
     ):
         super().__init__()
-        self.use_head = use_head
-
+        # TODO: Class token with cls pooling
         self.input_layer = InputLayer(dim_in, dim_h, op=input_operation, batch_size=batch_size)
         dim_h = self.input_layer.get_output_size() # must be divisible by num_heads
         layer = torch.nn.TransformerEncoderLayer(d_model=dim_h, nhead=num_heads)
         self.transformer = torch.nn.TransformerEncoder(layer, num_layers=6)
-        self.head = create_default_head(input_dim=dim_h, output_dim=num_classes, activation=F.relu, dropout=0.3)
+        if head_type == "classify":
+            self.head = create_default_head(input_dim=dim_h, output_dim=num_classes, activation=F.relu, dropout=0.3)
+        if head_type == "twin":
+            self.head = BasicTwinHead(dim_in=dim_h, num_classes=num_classes, activation=F.relu, dropout=0.3)
+        self.head_type = head_type
+        
 
     def forward(self, x):
         y = self.input_layer(x)
         y = self.transformer(y)
         y = y.mean(dim=1)
-        if self.use_head:
+        if not self.head_type == "pool":
             y = self.head(y)
         return y
 
