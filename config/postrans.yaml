@@ -73,7 +73,7 @@ callbacks:
     params:
       every_n_epochs: 1
       dirpath: experiments/posT/train
-      filename: "{epoch}-{val/acc:.2f}"
+      filename: "epoch={epoch}-val_acc={val/acc:.2f}"
       auto_insert_metric_name: False
       monitor: "val/acc"
       mode: max

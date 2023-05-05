@@ -98,8 +98,8 @@ callbacks:
   - name: ModelCheckpoint
     params:
       every_n_epochs: 1
-      dirpath: experiments/mvit/train
-      filename: "{epoch}-{val/acc:.2f}"
+      dirpath: experiments/multimodal/train
+      filename: "epoch={epoch}-val_acc={val/acc:.2f}"
       monitor: "val/acc"
       mode: max
       auto_insert_metric_name: False
