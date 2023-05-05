@@ -48,12 +48,9 @@ class LitModel(pl.LightningModule):
         self.ground_truths = []
         self.predictions = []
         self.confidences = []
-        self.pred_frame_idx = []
-        self.pred_match_number = []
-
-        self.ground_truth_anchors = []
-        self.ground_truth_anchors_label = []
-        self.ground_truth_anchors_match_number = []
+        self.frame_idx = []
+        self.match_numbers = []
+        self.action_idx = []
 
         self.val_loss = []
         self.train_loss = []
@@ -117,11 +114,10 @@ class LitModel(pl.LightningModule):
         self.ground_truths.clear()
         self.predictions.clear()
         self.confidences.clear()
-        self.pred_frame_idx.clear()
-        self.pred_match_number.clear()
-        self.ground_truth_anchors.clear()
-        self.ground_truth_anchors_label.clear()
-        self.ground_truth_anchors_match_number.clear()
+        self.frame_idx.clear()
+        self.match_numbers.clear()
+        self.action_idx.clear()
+
         self.val_loss.clear()
         self.weighted_val_accuracy.reset()
         self.val_accuracy.reset()
@@ -131,6 +127,7 @@ class LitModel(pl.LightningModule):
         offsets = batch["label_offset"]
         match_numbers = batch["match_number"]
         frame_indices = batch["frame_idx"]
+        label_idx = batch["label_idx"]
         y = self.forward(batch)
 
         if isinstance(y, tuple):
@@ -150,13 +147,10 @@ class LitModel(pl.LightningModule):
             self.predictions.append(preds[b].argmax().item())
             self.confidences.append(preds[b])
             self.ground_truths.append(targets[b].detach().cpu().item())
-            self.pred_frame_idx.append(frame_indices[b].cpu().item())
-            self.pred_match_number.append(match_numbers[b].cpu().item())
-            # gather ground truth for instances with annotated actions at pos 0.
-            if offsets[b] == 0: # this includes background predictions, they will be discarded later 
-                self.ground_truth_anchors.append(frame_indices[b].cpu().item())
-                self.ground_truth_anchors_match_number.append(match_numbers[b].cpu().item())
-                self.ground_truth_anchors_label.append(targets[b].detach().cpu().item())
+            self.frame_idx.append(frame_indices[b].cpu().item())
+            self.match_numbers.append(match_numbers[b].cpu().item())
+            self.action_idx.append(label_idx[b].cpu().item())
+
         self.val_loss.append(loss.detach().cpu().item())
 
     def on_validation_epoch_end(self) -> None:
@@ -188,38 +182,47 @@ class LitModel(pl.LightningModule):
 
         wandb.log({"val/prec_rec": pr})
 
-        # offset ground truth anchor positions to avoid collisions across matches
-        max_frame_magnitude = len(str(max(self.ground_truth_anchors)))
-        frame_offset = 10**(max_frame_magnitude + 1)
-
-        gt_match_number = np.array(self.ground_truth_anchors_match_number)
-        gt_anchor = np.array(self.ground_truth_anchors)
-        gt_anchor = gt_anchor + frame_offset * gt_match_number
-        gt_label = np.array(self.ground_truth_anchors_label)
-
-        # offset frames for predictions as well
-        pred_frame_idx = np.array(self.pred_frame_idx)
-        match_number = np.array(self.pred_match_number)
+        ground_truths = np.array(self.ground_truths)
         confidences = confidences.numpy()
+        frame_idx = np.array(self.frame_idx)
+        match_numbers = np.array(self.match_numbers)
+        action_idx = np.array(self.action_idx)
 
-        max_frame_magnitude = len(str(max(self.pred_frame_idx)))
+        # offset ground truth anchor positions to avoid collisions across matches
+        max_frame_magnitude = len(str(frame_idx.max()))
         frame_offset = 10**(max_frame_magnitude + 1)
+        offset_frame_idx = frame_idx + frame_offset * match_numbers
 
-        altered_frames = pred_frame_idx + frame_offset * match_number
-        correct_order = np.argsort(altered_frames)
-        print(len(altered_frames), len(confidences), len(correct_order))
-        altered_frames = altered_frames[correct_order]
-        confidences = confidences[correct_order]
+        pred_order = np.argsort(offset_frame_idx)
+        offset_frame_idx = offset_frame_idx[pred_order]
+        confidences = confidences[pred_order]
 
-        pred_anchors, pred_confidences = postprocess_predictions(confidences, altered_frames)
+        gt_anchors = []
+        gt_labels = []
+        for i, action_frame in enumerate(action_idx):
+            if action_frame == -1: # background action
+                continue
+            offset_action_frame = frame_offset * match_numbers[i] + action_frame
+            # we usually see the same actions T times
+            if offset_action_frame in gt_anchors:
+                continue
 
-        for var, name in zip([pred_confidences, pred_anchors, gt_label, gt_anchor], ["litmodel_confs", "litmodel_pred_anchors", "litmodel_gt_label", "litmodel_gt_anhors"]):
-            with open(name+".pkl", "wb+") as f:
-                pkl.dump(var, f)
+            gt_labels.append(ground_truths[i])
+            gt_anchors.append(offset_action_frame)
+
+        gt_anchors = np.array(gt_anchors)
+        gt_labels = np.array(gt_labels)
+
+        gt_order = np.argsort(gt_anchors)
+        gt_anchors = gt_anchors[gt_order]
+        gt_labels = gt_labels[gt_order]
+
+
+        pred_anchors, pred_confidences = postprocess_predictions(confidences, offset_frame_idx)
 
         fps = 29.97
         tolerances = [fps * i for i in range(1,6)]
-        map_per_tolerance = average_mAP(pred_confidences, pred_anchors, gt_label, gt_anchor, tolerances=tolerances)
+        map_per_tolerance = average_mAP(pred_confidences, pred_anchors, gt_labels, gt_anchors, tolerances=tolerances)
 
         data = [[sec, m] for (sec, m) in zip(range(1,6), map_per_tolerance)]
         table = wandb.Table(data=data, columns = ["seconds", "mAP"])
