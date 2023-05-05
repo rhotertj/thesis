@@ -384,9 +384,9 @@ def check_label_within_slice(start, stop, events, center_idx, sampling_rate):
         label, label_offset = {}, 0
     else:
         label = events.loc[label_idx].labels
-        label_offset = (label_idx - center_idx) // sampling_rate
+        label_offset = (label_idx - center_idx) / sampling_rate
             
-    return label, label_offset
+    return label, label_offset, label_idx
 
 
 def get_index_offset(boundaries, idx2frame, idx):

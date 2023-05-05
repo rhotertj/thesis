@@ -169,7 +169,7 @@ class MultiModalHblDataset(Dataset):
 
         # Iterate over window, load frames and check for event
         half_range = self.seq_half * self.sampling_rate
-        label, label_offset = check_label_within_slice(frame_idx - half_range, frame_idx + half_range, events, frame_idx, self.sampling_rate)
+        label, label_offset, label_idx = check_label_within_slice(frame_idx - half_range, frame_idx + half_range, events, frame_idx, self.sampling_rate)
         label = self.label_mapping(label)
 
         for window_idx in range(frame_idx - half_range, frame_idx + half_range, self.sampling_rate):
@@ -217,8 +217,6 @@ class MultiModalHblDataset(Dataset):
             mirror_vertical=self.mirror_vertical[match_number],
         )
 
-        label = self.label_mapping(label)
-
         instance = {
             "frames": frames,
             "positions": positions,
@@ -226,6 +224,7 @@ class MultiModalHblDataset(Dataset):
             "label_offset": label_offset,
             "frame_idx": frame_idx,
             "query_idx": idx,
+            "label_idx" : label_idx,
             "window_indices": window_indices,
             "match_number": match_number,
         }
@@ -269,7 +268,6 @@ class ResampledHblDataset(Dataset):
         load_frames: bool = True,
         transforms: Union[None, Compose] = None,
         label_mapping: callable = lambda x: x,
-        label_tolerances: list = [8, 16, 24],
     ):
         """
         This dataset provides a number of video frames (determined by seq_len) and
@@ -299,7 +297,6 @@ class ResampledHblDataset(Dataset):
         self.sampling_rate = sampling_rate
         self.transforms = transforms
         self.label_mapping = label_mapping
-        self.label_tolarances = label_tolerances
 
         print("Read", meta_path)
         self.meta_df = pd.read_csv(meta_path)
@@ -384,7 +381,7 @@ class ResampledHblDataset(Dataset):
         label_offset = 0  # Which frame of the window is portraying the action
 
         half_range = self.seq_half * self.sampling_rate
-        label, label_offset = check_label_within_slice(frame_idx - half_range, frame_idx + half_range, events, frame_idx, self.sampling_rate)
+        label, label_offset, label_idx = check_label_within_slice(frame_idx - half_range, frame_idx + half_range, events, frame_idx, self.sampling_rate)
         label = self.label_mapping(label)
 
         # Iterate over window, load frames and check for event
@@ -427,6 +424,7 @@ class ResampledHblDataset(Dataset):
             "label": label,
             "label_offset": label_offset,
             "frame_idx": frame_idx,
+            "label_idx" : label_idx,
             "query_idx": idx,
             "window_indices": window_indices,
             "match_number": match_number
