@@ -68,7 +68,7 @@ def average_mAP(pred_confidences: np.ndarray, pred_anchors: np.ndarray, gt_label
 
                 # If a prediction hits 2 windows, we attribute the prediction to the closest ground truth anchor.
                 # If a prediction does not hit any window, we keep the index as a FP example.
-                # (NOTE) If multiple predictions hit the same window, all are kept as TP.
+                # (NOTE) If multiple predictions hit the same window, all are kept as TP. TODO Only count one
                 # Windows without prediction are FN examples.
 
                 tp_idx = []
@@ -79,24 +79,26 @@ def average_mAP(pred_confidences: np.ndarray, pred_anchors: np.ndarray, gt_label
                     if windows_hit.any():
                         
                         gt_anchors_hit_idx = np.where(windows_hit)[0]
-                        # print(f"Anchor {pred_anchor} hit window of gt {gt_anchors_c[gt_anchors_hit_idx]}")
+                        # multiple windows hit by one prediction
                         if windows_hit.sum() > 1:
                             # only mark closest window as hit
                             pred_gt_dist = np.absolute((gt_anchors_c[gt_anchors_hit_idx] - pred_anchor))
                             closest_idx = pred_gt_dist.argmin()
                             # only add tp prediction if window is hit for the first time
-                            # if not gt_anchors_hit_idx[closest_idx] in tp_windows_idx:
-                            tp_idx.append(i)
+                            if not gt_anchors_hit_idx[closest_idx] in tp_windows_idx:
+                                tp_idx.append(i)
 
                             tp_windows_idx.add(gt_anchors_hit_idx[closest_idx])
+                        # only 1 prediction for window
                         else:
                             # only add tp prediction if window is hit for the first time
-                            # if not gt_anchors_hit_idx[0] in tp_windows_idx:
-                            tp_idx.append(i)
+                            if not gt_anchors_hit_idx[0] in tp_windows_idx:
+                                tp_idx.append(i)
                             tp_windows_idx.add(gt_anchors_hit_idx[0])
+                    # prediction outside of window
                     else:
                         fp_idx.append(i)
-                        # print(f"Anchor {pred_anchor} hit nothing")
+
                 # false negative: windows without a prediction
                 fn = len(gt_anchors_c) - len(tp_windows_idx)
                 assert fn >= 0, f"{len(gt_anchors_c)=} {len(tp_windows_idx)=}"
@@ -146,6 +148,8 @@ def postprocess_predictions(confidences :np.ndarray, frame_numbers : np.ndarray)
     # aggregate subsequent action-containing frames in `current_window`
     for i in range(len(confidences) - 1):
         action_spotted = (i in pass4) or (i in shot4)
+        if action_spotted:
+            current_window.append(i)
         # end of action
         end_of_window = (len(current_window) > 0) and not action_spotted
         # end of frame sequence 
@@ -158,16 +162,15 @@ def postprocess_predictions(confidences :np.ndarray, frame_numbers : np.ndarray)
                 pred_confidences.append(window_confidences[i])
 
             current_window.clear()
-        
-        if action_spotted:
-            current_window.append(i)
 
+        
     pred_anchor = np.array(pred_anchor)
     if len(pred_confidences) == 0 and len(pred_anchor) == 0:
         return np.array([]), np.array([])
     pred_confidences = np.stack(pred_confidences)
 
-    return pred_anchor, pred_confidences
+    return pred_anchor, pred_confidences,
+
 
 
 def predictions_from_window(window, confidences):
@@ -175,21 +178,34 @@ def predictions_from_window(window, confidences):
     window_confidences = confidences[window]
     if len(window) < 3:
         # TODO argmax 
-        return [window[0]], [confidences[window[0]]]
+        # return [window[0]], [confidences[window[0]]]
+        return [], []
     preds = []
 
+    # find peaks per class
     for c in range(1, window_confidences.shape[-1]):
-        c_idx, _ = scipy.signal.find_peaks(window_confidences[:, c], height=0.5, distance=16)
+        c_idx, _ = scipy.signal.find_peaks(window_confidences[:, c], height=0.5, distance=12)
         if len(c_idx) > 0:
             preds.append(c_idx)
     if len(preds) > 1:
-        # majority vote, area under curve, lenght of prediction, ...
+        # currently return all preds at all classes
+        # TODO majority vote, highest area under curve, lenght of prediction, ...
         pass
     window_idx = []
     for pred in preds:
         window_idx.extend([window[p] for p in pred])
 
     return window_idx, confidences[window_idx]
+
+def postprocess_peaks_only(confidences, frame_numbers, height, distance, width):
+    maxima_idx = []
+    for c in range(1, confidences.shape[-1]):
+        c_idx, _ = scipy.signal.find_peaks(confidences[:, c], height=height, distance=distance, width=width)
+        maxima_idx.extend(c_idx)
+    anchors = frame_numbers[maxima_idx]
+    anchor_confs = confidences[maxima_idx]
+    correct_order = np.argsort(anchors)
+    return anchors[correct_order], anchor_confs[correct_order]
 
 if __name__ == "__main__":
     import pickle as pkl
