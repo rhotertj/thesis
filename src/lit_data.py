@@ -32,7 +32,9 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
         batch_size : int = 1,
         epsilon : int = 7,
         mix_video : bool = True,
-        video_transforms : t.Compose = None
+        video_transforms : t.Compose = None,
+        position_format : str = "graph_per_sequence",
+        relative_positions: bool = False
         ) -> None:
 
         super().__init__()
@@ -56,11 +58,11 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
 
         if mix_video:
             video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes, mixup_alpha=0.8)
-            self.train_collate = collate_function_builder(epsilon, load_frames, video_transform)
+            self.train_collate = collate_function_builder(epsilon, load_frames, video_transform, position_format=position_format, relative_positions=relative_positions)
         else:
-            self.train_collate = collate_function_builder(epsilon, load_frames)
+            self.train_collate = collate_function_builder(epsilon, load_frames, position_format=position_format, relative_positions=relative_positions)
         
-        self.val_collate = collate_function_builder(epsilon, load_frames)
+        self.val_collate = collate_function_builder(epsilon, load_frames, position_format=position_format, relative_positions=relative_positions)
 
 
     def setup(self, stage : str):
@@ -168,11 +170,11 @@ class LitResampledHblDataset(pl.LightningDataModule):
 
         if mix_video:
             video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes, mixup_alpha=0.8, cutmix_prob=0)
-            self.train_collate = collate_function_builder(epsilon, load_frames, video_transform, position_format)
+            self.train_collate = collate_function_builder(epsilon, load_frames, video_transform, position_format, relative_positions=relative_positions)
         else:
-            self.train_collate = collate_function_builder(epsilon, load_frames, position_format=position_format)
+            self.train_collate = collate_function_builder(epsilon, load_frames, position_format=position_format, relative_positions=relative_positions)
         
-        self.val_collate = collate_function_builder(epsilon, load_frames, position_format=position_format)
+        self.val_collate = collate_function_builder(epsilon, load_frames, position_format=position_format, relative_positions=relative_positions)
 
 
     def setup(self, stage : str):
