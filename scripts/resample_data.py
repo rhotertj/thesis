@@ -132,16 +132,21 @@ def load_split_matches_df(data_path: Path, sequence_length: int, sampling_rate: 
     return dfs
 
 
-def balance_classes(overlap_df: pd.DataFrame, chunk_df: pd.DataFrame, background_size: float) -> pd.DataFrame:
-    overlapped_shots = overlap_df[overlap_df.class_coarse == "Shot"]
-    overlapped_passes = overlap_df[overlap_df.class_coarse == "Pass"].iloc[:len(overlapped_shots)]
+def balance_classes(overlap_df: pd.DataFrame, chunk_df: pd.DataFrame, background_size: float, upsample=True) -> pd.DataFrame:
+    if upsample:
+        overlapped_passes = overlap_df[overlap_df.class_coarse == "Pass"]
+        overlapped_shots = overlap_df[overlap_df.class_coarse == "Shot"].sample(len(overlapped_passes), replace=True)
+    
+    else:
+        overlapped_shots = overlap_df[overlap_df.class_coarse == "Shot"]
+        overlapped_passes = overlap_df[overlap_df.class_coarse == "Pass"].iloc[:len(overlapped_shots)]
     
     n_shots_passes = len(overlapped_passes) + len(overlapped_shots)
     frac_shots_passes = 1 - background_size
     n_background = int((n_shots_passes / frac_shots_passes) * background_size)
 
     print("Sampling n background", n_background, "for shots and passes:", n_shots_passes)
-    overlapped_background = overlap_df[overlap_df.shot.isnull()].sample(n_background)
+    overlapped_background = overlap_df[overlap_df.shot.isnull()].sample(n_background, replace=n_background > len(overlap_df[overlap_df.shot.isnull()]))
     balanced_df = pd.concat([overlapped_passes, overlapped_background, overlapped_shots])
     balanced_df.sort_values(by=["frame_idx"], inplace=True)
     balanced_df.reset_index(inplace=True, drop=True)
@@ -215,22 +220,22 @@ if "__main__" == __name__:
     parser.add_argument(
         "-d", "--data_path", type=str, help='Path for meta data.', default=Path("/nfs/home/rhotertj/datasets/hbl")
     )
-    parser.add_argument('-m', "--mode", type=str, help='Splitting criterion.', choices=['matches', 'random', 'time'])
-    parser.add_argument('-v', "--val_size", type=float, help="Split size of validation set.", default=0.15)
-    parser.add_argument('-t', "--test_size", type=float, help="Split size of test set.", default=0.15)
-    parser.add_argument('-bs', "--background_size", type=float, default=0.6, help="Proportion of the background class when balancing proportions.")
+    parser.add_argument("--mode", type=str, help='Splitting criterion.', choices=['matches', 'random', 'time'])
+    parser.add_argument("--val_size", type=float, help="Split size of validation set.", default=0.15)
+    parser.add_argument("--test_size", type=float, help="Split size of test set.", default=0.15)
+    parser.add_argument("--background_size", type=float, default=0.6, help="Proportion of the background class when balancing proportions.")
     parser.add_argument(
-        '-b', "--balanced", type=bool, help="Whether upsampling of underrepresented classes takes place.", default=False
+        "--balanced", help="Whether upsampling of underrepresented classes takes place.", default=False, action='store_true'
     )
     parser.add_argument(
-        '-o',
         '--overlap',
-        type=bool,
         help="Whether to use overlapping sliding windows. Ignored when --balanced is True.",
-        default=True
+        default=True,
+        action='store_true'
     )
-    parser.add_argument('-l', '--sequence_length', type=int, help="Sequence length.")
-    parser.add_argument('-r', '--sampling_rate', type=int, help="Sampling rate.")
+    parser.add_argument('--sequence_length', type=int, help="Sequence length.")
+    parser.add_argument('--sampling_rate', type=int, help="Sampling rate.")
+    parser.add_argument('--upsample', action='store_true', help="Whether to upsample shots or downsample passes.")
 
     args = parser.parse_args()
     print(args)
@@ -242,7 +247,7 @@ if "__main__" == __name__:
         exit(1)
 
 
-    fpath = args.data_path / "resampled" / "balanced" / str(args.balanced) / "overlap" / str(args.overlap) / "sql_sr" / f"{args.sequence_length}x{args.sampling_rate}" / "mode" / args.mode
+    fpath = args.data_path / "resampled" / "balanced" / str(args.balanced) / "overlap" / str(args.overlap) / "sql_sr" / f"{args.sequence_length}x{args.sampling_rate}" / "mode" / args.mode / "upsampled" / str(args.upsample)
     print("Creating", fpath)
     os.makedirs(
         fpath,
