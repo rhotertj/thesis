@@ -37,6 +37,17 @@ def main(conf):
     )
     experiment_name = logger.experiment.name
     
+    callbacks = []
+    for callback in conf.callbacks:
+        if callback.name == "ModelCheckpoint":
+            exp_dir = callback.params.dirpath
+            exp_dir = Path(exp_dir) / experiment_name
+            callback.params.dirpath = exp_dir.resolve()
+        cb = eval(callback.name)(**callback.params)
+        callbacks.append(cb)
+
+    # create experiment dir and save config
+    os.makedirs(exp_dir, exist_ok=True) # allow overwrite, useful for manually set expnames
 
     label_decoder = LabelDecoder(conf.num_classes)
 
@@ -55,7 +66,8 @@ def main(conf):
         scheduler=scheduler,
         loss_func=loss_func,
         model=model,
-        label_mapping=label_decoder
+        label_mapping=label_decoder,
+        experiment_dir=exp_dir
     )
 
     if conf.data.transforms:
@@ -90,19 +102,6 @@ def main(conf):
             test_df = get_proportions_df(lit_data.data_test, label_decoder, conf.num_classes)
             logger.log_table("test/classes", data=test_df)
         
-        
-    callbacks = []
-    for callback in conf.callbacks:
-        if callback.name == "ModelCheckpoint":
-            exp_dir = callback.params.dirpath
-            exp_dir = Path(exp_dir) / experiment_name
-            callback.params.dirpath = exp_dir.resolve()
-        cb = eval(callback.name)(**callback.params)
-        callbacks.append(cb)
-
-    # create experiment dir and save config
-    os.makedirs(exp_dir, exist_ok=True) # allow overwrite, useful for manually set expnames
-
     if conf.save_config:
         with open(exp_dir/"config.yaml", "w+") as f:
             f.write(omcon.to_yaml(conf))

@@ -208,65 +208,74 @@ def postprocess_peaks_only(confidences, frame_numbers, height, distance, width):
     return anchors[correct_order], anchor_confs[correct_order]
 
 if __name__ == "__main__":
-    import pickle as pkl
     import pandas as pd
-    val_res_name = "/nfs/home/rhotertj/Code/thesis/dataset/analysis/youthful-shadow-248/val_results.pkl"
-    # val_res_name = "/nfs/home/rhotertj/Code/thesis/dataset/analysis/copper-bush-8/val_results.pkl"
-    with open(val_res_name, "rb") as f:
-        val_results = pkl.load(f)
+    from lit_models import Cache
+    import torch
 
-    df = pd.DataFrame(val_results)
-    confidences = np.concatenate(df.confidences.to_numpy())
-    frame_numbers = df.frame_idx.to_numpy()
-    match_numbers = df.match_number.to_numpy()
-    label_offsets = df.label_offset.to_numpy()
-    gt_labels = df.label.to_numpy()
-    # shift frame annotations for each match into a different numerical space 
-    max_frame_magnitude = len(str(frame_numbers.max()))
-    print("mag", max_frame_magnitude)
-    print("match numbers", np.unique(match_numbers))
+    val_res_name = "/nfs/home/rhotertj/Code/thesis/experiments/multimodal/train/warm-star-17/val_results.pkl"
+
+    cache = Cache()
+    cache.load(val_res_name)
+    ground_truths = cache.get("ground_truths")
+    confidences = torch.stack(cache.get("confidences", as_numpy=False)).numpy()
+    frame_idx = cache.get("frame_idx")
+    match_numbers = cache.get("match_numbers")
+    action_idx = cache.get("action_idx")
+
+    # offset ground truth anchor positions to avoid collisions across matches
+    max_frame_magnitude = len(str(frame_idx.max()))
     frame_offset = 10**(max_frame_magnitude + 1)
-    print("off", frame_offset)
-    frame_numbers = frame_numbers + (frame_offset * match_numbers)
-    print(frame_numbers)
-    correct_order = np.argsort(frame_numbers)
-    reordered_frames = frame_numbers[correct_order]
-    confidences = confidences[correct_order]
-    
-    
+    offset_frame_idx = frame_idx + frame_offset * match_numbers
 
-    anchors, confs = postprocess_predictions(confidences, reordered_frames)
-    anchors = np.array(anchors)
-    confs = np.stack(confs)
+    pred_order = np.argsort(offset_frame_idx)
+    offset_frame_idx = offset_frame_idx[pred_order]
+    confidences = confidences[pred_order]
 
-    print(anchors.shape, confs.shape)
-    gt_label = gt_labels[label_offsets == 0]
-    gt_anchor = frame_numbers[label_offsets == 0]
+    gt_anchors = []
+    gt_labels = []
+    for i, action_frame in enumerate(action_idx):
+        if action_frame == -1: # background action
+            continue
+        offset_action_frame = frame_offset * match_numbers[i] + action_frame
+        # we usually see the same actions T times
+        if offset_action_frame in gt_anchors:
+            continue
+
+        gt_labels.append(ground_truths[i])
+        gt_anchors.append(offset_action_frame)
+
+    gt_anchors = np.array(gt_anchors)
+    gt_labels = np.array(gt_labels)
+
+    gt_order = np.argsort(gt_anchors)
+    gt_anchors = gt_anchors[gt_order]
+    gt_labels = gt_labels[gt_order]
+
+
+    pred_anchors, pred_confidences = postprocess_predictions(confidences, offset_frame_idx)
 
     fps = 29.97
-    for var, name in zip([confs, anchors, gt_label, gt_anchor], ["metric_confs", "metric_pred_anchors", "metric_gt_label", "metric_gt_anhors"]):
-        with open(name+".pkl", "wb+") as f:
-            pkl.dump(var, f)
-    print(average_mAP(confs, anchors, gt_label, gt_anchor, tolerances=[fps, 2*fps, 3*fps, 10*fps]))
-
-    pred_label = np.array([1, 1, 1, 1, 2, 2, 2, 2])
-    pred_confidences = np.array([
-        [0, 0.3, 0],
-        [0, 1.0, 0],
-        [0, 0.7, 0],
-        [0, 0.7, 0],
-        [0, 0, 0.8],
-        [0, 0, 1.0],
-        [0, 0, 1.0],
-        [0, 0, 0.8]
-    ])
-    assert (pred_confidences.argmax(-1) == pred_label).all()
-    pred_anchor = np.array([10, 20, 32, 50, 53, 70, 94, 97])
-    gt_anchor   = np.array([4, 22, 47, 72, 100])
-    gt_label = np.array([1, 1, 2, 1, 2])
+    tolerances = [fps * i for i in range(1,6)]
+    map_per_tolerance = average_mAP(pred_confidences, pred_anchors, gt_labels, gt_anchors, tolerances=tolerances)
+    print(map_per_tolerance)
+    # pred_label = np.array([1, 1, 1, 1, 2, 2, 2, 2])
+    # pred_confidences = np.array([
+    #     [0, 0.3, 0],
+    #     [0, 1.0, 0],
+    #     [0, 0.7, 0],
+    #     [0, 0.7, 0],
+    #     [0, 0, 0.8],
+    #     [0, 0, 1.0],
+    #     [0, 0, 1.0],
+    #     [0, 0, 0.8]
+    # ])
+    # assert (pred_confidences.argmax(-1) == pred_label).all()
+    # pred_anchor = np.array([10, 20, 32, 50, 53, 70, 94, 97])
+    # gt_anchor   = np.array([4, 22, 47, 72, 100])
+    # gt_label = np.array([1, 1, 2, 1, 2])
     
-    deltas = 8, 16, 24
-    map_per_delta = average_mAP(pred_confidences, pred_anchor, gt_label, gt_anchor, deltas, [0.2, 0.5, 1])
-    print(map_per_delta)
-    label = [((2/24 + (1/12 + 12/27) / 3) / 2), ((7/12 + 7/27) / 2), ((7/12 + 59/144) / 2)]
+    # deltas = 8, 16, 24
+    # map_per_delta = average_mAP(pred_confidences, pred_anchor, gt_label, gt_anchor, deltas, [0.2, 0.5, 1])
+    # print(map_per_delta)
+    # label = [((2/24 + (1/12 + 12/27) / 3) / 2), ((7/12 + 7/27) / 2), ((7/12 + 59/144) / 2)]
     # assert np.allclose(map_per_delta, label, atol=0.001), f"{map_per_delta} {label}"

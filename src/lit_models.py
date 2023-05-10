@@ -8,6 +8,7 @@ import numpy as np
 import seaborn as sns
 import itertools
 import pickle as pkl
+from pathlib import Path
 
 from video_models import make_kinetics_mvit
 from graph_models import GAT, PositionTransformer, GIN, GCN
@@ -25,13 +26,15 @@ class LitModel(pl.LightningModule):
         scheduler: callable,
         optimizer: callable,
         loss_func: callable,
-        model: torch.nn.Module
+        model: torch.nn.Module,
+        experiment_dir : Path
     ) -> None:
         super().__init__()
         num_classes = label_mapping.num_classes
         self.model = model
 
         #wandb.watch(self.model)
+        self.experiment_dir = experiment_dir
 
         self.loss_func = loss_func
         self.scheduler = scheduler
@@ -45,13 +48,14 @@ class LitModel(pl.LightningModule):
         self.weighted_val_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes)
 
         # cache, needed from lightning v2.0.0
-        self.ground_truths = []
-        self.predictions = []
-        self.confidences = []
-        self.frame_idx = []
-        self.match_numbers = []
-        self.action_idx = []
-
+        self.cache = Cache(
+            ground_truths = [],
+            predictions = [],
+            confidences = [],
+            frame_idx = [],
+            match_numbers = [],
+            action_idx = [],
+        )
         self.val_loss = []
         self.train_loss = []
 
@@ -111,12 +115,7 @@ class LitModel(pl.LightningModule):
         self.log_dict(acc_dict)
 
     def on_validation_epoch_start(self) -> None:
-        self.ground_truths.clear()
-        self.predictions.clear()
-        self.confidences.clear()
-        self.frame_idx.clear()
-        self.match_numbers.clear()
-        self.action_idx.clear()
+        self.cache.clear()
 
         self.val_loss.clear()
         self.weighted_val_accuracy.reset()
@@ -125,9 +124,6 @@ class LitModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         targets = batch["label"]
         offsets = batch["label_offset"]
-        match_numbers = batch["match_number"]
-        frame_indices = batch["frame_idx"]
-        label_idx = batch["label_idx"]
         y = self.forward(batch)
 
         if isinstance(y, tuple):
@@ -142,14 +138,14 @@ class LitModel(pl.LightningModule):
         preds = y.detach().cpu()
 
         # save for validation metrics
-        for b in range(len(targets)):
-            # all predictions for PR curve and confmat, frame_idx for post_processing
-            self.predictions.append(preds[b].argmax().item())
-            self.confidences.append(preds[b])
-            self.ground_truths.append(targets[b].detach().cpu().item())
-            self.frame_idx.append(frame_indices[b].cpu().item())
-            self.match_numbers.append(match_numbers[b].cpu().item())
-            self.action_idx.append(label_idx[b].cpu().item())
+        self.cache.update(
+            predictions=preds.argmax(-1),
+            confidences=preds,
+            ground_truths=targets,
+            frame_idx=batch["frame_idx"],
+            match_numbers=batch["match_number"],
+            action_idx=batch["label_idx"]
+        )
 
         self.val_loss.append(loss.detach().cpu().item())
 
@@ -163,18 +159,20 @@ class LitModel(pl.LightningModule):
 
         self.log("val/loss", np.mean(self.val_loss))
 
+        self.cache.save(self.experiment_dir / "val_results.pkl")
+
         cm = wandb.plot.confusion_matrix(
-            y_true=self.ground_truths,
-            preds=self.predictions,
+            y_true=self.cache.get("ground_truths"),
+            preds=self.cache.get("predictions"),
             class_names=self.class_names,
             title="Confusion Matrix",
         )
 
         wandb.log({"val/conf_mat": cm})
 
-        confidences = torch.stack(self.confidences)
+        confidences = torch.stack(self.cache.get("confidences", as_numpy=False))
         pr = wandb.plot.pr_curve(
-            self.ground_truths,
+            self.cache.get("ground_truths"),
             confidences,
             labels=self.class_names,
             title="Precision vs. Recall per class",
@@ -182,11 +180,11 @@ class LitModel(pl.LightningModule):
 
         wandb.log({"val/prec_rec": pr})
 
-        ground_truths = np.array(self.ground_truths)
+        ground_truths = self.cache.get("ground_truths")
         confidences = confidences.numpy()
-        frame_idx = np.array(self.frame_idx)
-        match_numbers = np.array(self.match_numbers)
-        action_idx = np.array(self.action_idx)
+        frame_idx = self.cache.get("frame_idx")
+        match_numbers = self.cache.get("match_numbers")
+        action_idx = self.cache.get("action_idx")
 
         # offset ground truth anchor positions to avoid collisions across matches
         max_frame_magnitude = len(str(frame_idx.max()))
@@ -274,3 +272,62 @@ def twin_head_loss(batch_cls: torch.Tensor, batch_reg: torch.Tensor, batch_gt: t
     reg_loss = torch.nn.functional.huber_loss(batch_reg.squeeze(1), batch_label_offsets.float())
     sigma = 0.8
     return cls_loss + (sigma * reg_loss)
+
+
+class Cache:
+
+    def __init__(self, **kwargs):
+        """A cache for concatenating [B,1] shaped arrays in one list.
+        """        
+        self.data = {}
+        for k, v in kwargs.items():
+            self.data[k] = v
+
+    def update(self, batched=True, **kwargs):
+        for k, v in kwargs.items():
+            if isinstance(v, torch.Tensor):
+                v = v.detach().cpu()
+
+                if batched:
+                    for b in range(v.shape[0]):
+                        if v[b].ndim == 0 or len(v[b]) == 1:
+                            self.data[k].append(v[b].item())
+                        else:
+                            self.data[k].append(v[b])
+            else:
+                self.data[k].append(v)
+
+    def add(self, **kwargs):
+        for k, v in kwargs.items():
+            self.data[k] = v
+
+    def get(self, key, as_numpy=True):
+        if as_numpy:
+            return np.array(self.data[key])
+        return self.data[key]
+
+    def save(self, path : Path):
+        with open(path, "wb+") as f:
+            pkl.dump(self.data, f)
+
+    def load(self, path: str):
+        with open(path, "rb") as f:
+            loaded = pkl.load(f)
+        for k, v in loaded.items():
+            if k in self.data:
+                print("Overwriting", k, "from loaded cache.")
+            self.data[k] = v      
+
+    def clear(self):
+        for k in self.data.keys():
+            self.data[k] = []  
+
+    def __repr__(self):
+        return f"{self.data=}"
+
+if __name__ == "__main__":
+    cache = Cache(listig=[], omnom=["Banane"])
+    cache.update(omnom="Kaffee")
+    cache.update(listig=torch.rand(8,1))
+    cache.save("./cache.pkl")
+    print(cache)
