@@ -5,7 +5,7 @@ import torch
 import numpy as np
 import dgl
 from torchvision import transforms as t
-import video_transforms as vt
+import multimodal_transforms as mmt
 import pytorchvideo.transforms as ptvt
 
 from data.datasets import MultiModalHblDataset, ResampledHblDataset
@@ -49,8 +49,8 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
         self.label_mapping = label_mapping
         self.batch_size = batch_size
         self.val_transforms = t.Compose([
-            vt.FrameSequenceToTensor(),
-            t.Resize((224,224))
+            mmt.FrameSequenceToTensor(),
+            mmt.Resize(size=(224,224))
             ])
 
         self.train_transforms = video_transforms if video_transforms else self.val_transforms
@@ -162,8 +162,8 @@ class LitResampledHblDataset(pl.LightningDataModule):
         self.label_mapping = label_mapping
         self.batch_size = batch_size
         self.val_transforms = t.Compose([
-            vt.FrameSequenceToTensor(),
-            t.Resize((224,224))
+            mmt.FrameSequenceToTensor(),
+            mmt.Resize(size=(224,224))
             ])
 
         self.train_transforms = video_transforms if video_transforms else self.val_transforms           

@@ -15,8 +15,7 @@ from torch.optim import SGD, Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
 
 from torchvision import transforms as t
-import video_transforms as vt
-import pytorchvideo.transforms as ptvt
+import multimodal_transforms as mmt
 
 from lit_models import LitModel, weighted_cross_entropy, unweighted_cross_entropy, twin_head_loss
 from video_models import make_kinetics_mvit

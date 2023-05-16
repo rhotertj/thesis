@@ -296,12 +296,11 @@ if __name__ == "__main__":
     from data.datasets import MultiModalHblDataset, ResampledHblDataset
     from lit_data import collate_function_builder
     from torchvision import transforms as t
-    import video_transforms as vt
-    import pytorchvideo.transforms as ptvt
+    import multimodal_transforms as mmt
 
     basic_transforms = t.Compose([
-            vt.FrameSequenceToTensor(),
-            t.Resize((224,224))
+            mmt.FrameSequenceToTensor(),
+            mmt.Resize(size=(224,224))
             ])
 
     collate_fn_flat = collate_function_builder(7, True, None, "flattened")

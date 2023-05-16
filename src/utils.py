@@ -7,6 +7,7 @@ from PIL import Image
 import torch.utils.data
 from data.labels import LabelDecoder
 import networkx as nx
+from data.data_utils import PositionContainer
 
 
 def get_proportions_df(
@@ -41,18 +42,20 @@ def plot_confmat(confmat):
     return fig
 
 
-def draw_trajectory(positions: np.ndarray):
+def draw_trajectory(positions: PositionContainer):
     """Plots player and ball positions as a scatterplot.
     Positions of the past become transparent.
 
     Args:
-        positions (np.ndarray): Positions of shape [T, N, 3].
+        positions (PositionContainer): Positions of shape [T, N, 3].
 
     Returns:
         plt.figure.Figure: The plot.
     """
-    A = positions.shape[0]
-    T = (len(positions[1]) - 1) // 3
+    team_a = positions.team_a
+    team_b = positions.team_b
+    ball = positions.ball
+    T = team_a.shape[0]
     # start new figure, toss the old one
     plt.close()
     fig = plt.figure()
@@ -61,14 +64,19 @@ def draw_trajectory(positions: np.ndarray):
     plt.ylim(0, 20)
 
     colors = ["red", "green", "blue"]
-    for agent in range(A):
+    for i, pos in enumerate([team_a, team_b, ball]):
         for t in range(T):
-            a = t / T  # transparency
-            y_t = positions[agent, t*3+2] # offset x and team
-            x_t = positions[agent, t*3+1] # offset team
-            team_indicator = positions[agent, 0]  # team indicator, used for colors
-
-            sns.scatterplot(y=[y_t], x=[x_t], color=colors[int(team_indicator)], legend=False, alpha=a)
+            for agent in range(pos.shape[1]):
+                a = t / T  # transparency
+                y_t = pos[t, agent, 1].item()
+                x_t = pos[t, agent, 0].item()
+                sns.scatterplot(
+                    y=[y_t],
+                    x=[x_t],
+                    color=colors[i],
+                    legend=False,
+                    alpha=a
+                )
 
     return fig
 

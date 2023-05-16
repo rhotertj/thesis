@@ -72,17 +72,16 @@ if __name__ == "__main__":
     from data.datasets import MultiModalHblDataset
     import torch
     import numpy as np
-    from torchvision.transforms.functional import center_crop
     from lit_data import collate_function_builder
     from torchvision import transforms as t
-    import video_transforms as vt
+    import multimodal_transforms as mmt
 
     model = make_kinetics_mvit("models/mvit_b_16x4.pt", num_classes=3, batch_size=8, netvlad_clusters=4, head_type="classify")
 
     model.eval()
     basic_transforms = t.Compose([
-            vt.FrameSequenceToTensor(),
-            t.Resize((224,224))
+            mmt.FrameSequenceToTensor(),
+            mmt.Resize(size=(224,224))
             ])
 
     collate_fn = collate_function_builder(
@@ -101,6 +100,7 @@ if __name__ == "__main__":
         instances.append(x)
 
     batch = collate_fn(instances)
+    print(batch)
 
     x = batch["frames"]
     y = model(x)

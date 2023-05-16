@@ -1,6 +1,8 @@
+from typing import Any
 import torch
 from torch import Tensor
 import torchvision.transforms.functional as F
+from torchvision import transforms as t
 import numpy
 import random
 
@@ -11,6 +13,7 @@ Unlike the claims in the documentation regarding the inputs shape,
 torchvision has many sanity checks for the channel dimension to be at dimension 0.
 This collides with the temporal dimension in videos.
 'Irrelevant' parts or checks from the original codebase are omitted, just like jit flags.
+Some classes only serve as wrappers to allow a single stack of transforms for both modalities.
 """
 
 class ChannelFirst:
@@ -20,10 +23,13 @@ class ChannelFirst:
     def __init__(self) -> None:
         pass
 
-    def __call__(self, video) -> torch.Tensor:
-        if not video.shape[1] in (1,3):
+    def __call__(self, mm_data) -> torch.Tensor:
+        if not "frames" in mm_data or mm_data["frames"] == []:
+            return mm_data
+        if not mm_data["frames"].shape[1] in (1,3):
             raise ValueError("Channel dimension expected at dimension 1.")
-        return torch.einsum("tchw->cthw", video)
+        mm_data["frames"] = torch.einsum("tchw->cthw", mm_data["frames"])
+        return mm_data
 
     def __repr__(self) -> str:
         return "[T, C, H, W] -> [C, T, H, W]"
@@ -35,10 +41,13 @@ class TimeFirst:
     def __init__(self) -> None:
         pass
 
-    def __call__(self, video) -> torch.Tensor:
-        if not video.shape[0] in (1,3):
+    def __call__(self, mm_data) -> torch.Tensor:
+        if not "frames" in mm_data or mm_data["frames"] == []:
+            return mm_data
+        if not mm_data["frames"].shape[0] in (1,3):
             raise ValueError("Channel dimension expected at dimension 0.")
-        return torch.einsum("cthw->tchw", video)
+        mm_data["frames"] = torch.einsum("cthw->tchw", mm_data["frames"])
+        return mm_data
 
     def __repr__(self) -> str:
         return "[C, T, H, W] -> [T, C, H, W]"
@@ -53,7 +62,7 @@ class RandomHorizontalFlipVideo:
     def __init__(self, p=0.5):
         self.p = p
 
-    def __call__(self, clip):
+    def __call__(self, mm_data):
         """
         Args:
             clip (torch.tensor): Size is (C, T, H, W)
@@ -61,8 +70,10 @@ class RandomHorizontalFlipVideo:
             clip (torch.tensor): Size is (C, T, H, W)
         """
         if random.random() < self.p:
-            clip = F.hflip(clip)
-        return clip
+            if "frames" in mm_data and not mm_data["frames"] == []:
+                mm_data["frames"] = F.hflip(mm_data["frames"])
+                mm_data["positions"] = mm_data["positions"].mirror_again(horizontal=True, vertical=False)
+        return mm_data
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(p={self.p})"
@@ -79,14 +90,17 @@ class FrameSequenceToTensor:
         # _log_api_usage_once(self)
         pass
 
-    def __call__(self, video):
+    def __call__(self, mm_data):
         """
         Args:
             video (numpy.ndarray): Video to be converted to tensor.
         Returns:
             Tensor: Converted image.
         """
-        return video_to_tensor(video)
+        if not "frames" in mm_data or mm_data["frames"] == []:
+            return mm_data
+        mm_data["frames"] = video_to_tensor(mm_data["frames"])
+        return mm_data
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
@@ -105,15 +119,71 @@ class NormalizeVideo:
         self.std = std
         self.inplace = inplace
 
-    def __call__(self, clip):
+    def __call__(self, mm_data):
         """
         Args:
             clip (torch.tensor): video clip to be normalized. Size is (C, T, H, W)
         """
-        return normalize_video(clip, self.mean, self.std, self.inplace)
+        if not "frames" in mm_data or mm_data["frames"] == []:
+            return mm_data
+        mm_data["frames"] = normalize_video(mm_data["frames"], self.mean, self.std, self.inplace)
+        return mm_data
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(mean={self.mean}, std={self.std}, inplace={self.inplace})"
+
+class Resize:
+
+    def __init__(self, **kwargs) -> None:
+        self.transform = t.Resize(**kwargs)
+
+    def __call__(self, mm_data) -> dict:
+        if not "frames" in mm_data or mm_data["frames"] == []:
+            return mm_data
+        mm_data["frames"] = self.transform(mm_data["frames"])
+        return mm_data
+
+    def __repr__(self) -> str:
+        return f"{self.transform}"
+    
+class ColorJitter:
+
+    def __init__(self, **kwargs) -> None:
+        self.transform = t.ColorJitter(**kwargs)
+
+    def __call__(self, mm_data) -> Any:
+        if not "frames" in mm_data or mm_data["frames"] == []:
+            return mm_data
+        mm_data["frames"] = self.transform(mm_data["frames"])
+        return mm_data
+    
+    def __repr__(self) -> str:
+        return f"{self.transform}"
+
+class Translate:
+
+    def __init__(self, mean=0, y_std=1, x_std=2) -> None:
+        self.mean = mean
+        self.x_std = x_std
+        self.y_std = y_std
+        
+    def __call__(self, mm_data) -> Any:
+        
+        translate_x = numpy.random.normal(self.mean, self.x_std)
+        translate_y = numpy.random.normal(self.mean, self.y_std)
+        print("Translate x y", translate_x, translate_y)
+        mm_data["positions"].team_a[:, :, 0] += translate_x # longer side, x
+        mm_data["positions"].team_a[:, :, 1] += translate_y
+
+        #positions.team_a = torch.clamp(positions.team_a, min=0, max=1)
+        mm_data["positions"].team_b[:, :, 0] += translate_x # longer side, x
+        mm_data["positions"].team_b[:, :, 1] += translate_y
+
+        mm_data["positions"].ball[:, :, 0] += translate_x # longer side, x
+        mm_data["positions"].ball[:, :, 1] += translate_y
+
+        return mm_data
+
 
 def normalize_video(clip, mean, std, inplace=False):
     """

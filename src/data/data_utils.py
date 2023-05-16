@@ -47,6 +47,9 @@ class PositionContainer:
         # ensure correct teamsizes
         self.team_a, self.team_b = ensure_correct_team_size(self.team_a, self.team_b)
 
+        self.team_a = torch.Tensor(self.team_a)
+        self.team_b = torch.Tensor(self.team_b)
+        self.ball = torch.Tensor(self.ball)
         # Mirror teams and ball if necessary
         self.team_a = mirror_positions_tn3(
             self.team_a,
@@ -65,9 +68,25 @@ class PositionContainer:
             horizontal=self.mirror_horizontal,
         )
 
-        self.team_a = torch.Tensor(self.team_a)
-        self.team_b = torch.Tensor(self.team_b)
-        self.ball = torch.Tensor(self.ball)
+
+    def mirror_again(self, horizontal : bool, vertical : bool):
+        self.team_a = mirror_positions_tn3(
+            self.team_a,
+            vertical=vertical,
+            horizontal=horizontal,
+        )
+        self.team_b = mirror_positions_tn3(
+            self.team_b,
+            vertical=vertical,
+            horizontal=horizontal,
+        )
+    
+        self.ball = mirror_positions_tn3(
+            self.ball,
+            vertical=vertical,
+            horizontal=horizontal,
+        )
+        return self
 
     def as_graph_per_sequence(self, epsilon: int, relative_positions: bool) -> dgl.DGLGraph:
         """Constructs a graph with flattened trajectory per player as node features.
@@ -311,7 +330,7 @@ def ensure_correct_team_size(team_a, team_b):
 
 
 def mirror_positions_tn3(
-    positions: np.ndarray,
+    positions: torch.Tensor,
     horizontal: bool = True,
     vertical: bool = False,
     court_width: int = 40,
@@ -322,18 +341,19 @@ def mirror_positions_tn3(
     switches left and right.
 
     Args:
-        positions (np.ndarray): Player and ball positions.
+        positions (torch.Tensor): Player and ball positions.
         horizontal (bool, optional): Mirror horizontally. Defaults to False.
         vertical (bool, optional): Mirror vertically. Defaults to True.
         court_width (int, optional): Court width in meters. Defaults to 40.
         court_height (int, optional): Court height in meters. Defaults to 20.
     """
-    if vertical:
-        positions[:, :, 1] = court_height - positions[:, :, 1]
+    new_positions = positions.clone()
     if horizontal:
-        positions[:, :, 0] = court_width - positions[:, :, 0]
+        new_positions[:, :, 0] = court_width - positions[:, :, 0]
+    if vertical:
+        new_positions[:, :, 1] = court_height - positions[:, :, 1]
 
-    return positions
+    return new_positions
 
 
 def mirror_positions(

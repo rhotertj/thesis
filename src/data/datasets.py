@@ -183,8 +183,7 @@ class MultiModalHblDataset(Dataset):
 
         if self.load_frames:
             frames = np.stack(frames)
-            if self.transforms:
-                frames = self.transforms(frames)
+
 
         team_a_pos, team_b_pos, ball_pos, _ = self.position_arrays[match_number]
 
@@ -204,6 +203,11 @@ class MultiModalHblDataset(Dataset):
             mirror_horizontal=self.mirror_horizontal[match_number],
             mirror_vertical=self.mirror_vertical[match_number],
         )
+
+        if self.transforms:
+            frames, positions = self.transforms(
+                {"frames" : frames, "positions" : positions}
+            ).values()
 
         instance = {
             "frames": frames,
@@ -384,8 +388,6 @@ class ResampledHblDataset(Dataset):
 
         if self.load_frames:
             frames = np.stack(frames)
-            if self.transforms:
-                frames = self.transforms(frames)
 
         team_a_pos, team_b_pos, ball_pos, _ = self.position_arrays[match_number]
 
@@ -405,6 +407,11 @@ class ResampledHblDataset(Dataset):
             mirror_horizontal=self.mirror_horizontal[match_number],
             mirror_vertical=self.mirror_vertical[match_number],
         )
+
+        if self.transforms:
+            frames, positions = self.transforms(
+                {"frames" : frames, "positions" : positions}
+            ).values()
 
         instance = {
             "frames": frames,
