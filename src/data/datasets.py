@@ -130,7 +130,7 @@ class MultiModalHblDataset(Dataset):
             - the corresponding event label
             - the annotated event position in the frame stack.
 
-        Note that the provided index is valid over the whole dataset.
+        Note that the provided index is continuous over the whole dataset.
         It can not be treated as a frame number or index for a given match.
         It first needs to be matched against a match and a frame number, based on the availability of positional data.
 
@@ -197,18 +197,6 @@ class MultiModalHblDataset(Dataset):
         team_b_pos = team_b_pos[position_slice]
         ball_pos = ball_pos[position_slice]
 
-        # team_a_pos, team_b_pos = ensure_correct_team_size(team_a_pos, team_b_pos)
-
-        # teams_pos = combine_teams_with_indicator(team_a_pos, team_b_pos)
-        # ball_pos = combine_ball_with_indicator(ball_pos)
-
-        # all_pos = np.vstack([teams_pos, ball_pos])
-
-        # all_pos = mirror_positions(
-        #     all_pos,
-        #     vertical=self.mirror_vertical[match_number],
-        #     horizontal=self.mirror_horizontal[match_number],
-        # )
         positions = PositionContainer(
             team_a=team_a_pos,
             team_b=team_b_pos,

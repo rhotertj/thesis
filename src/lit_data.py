@@ -240,7 +240,13 @@ class LitResampledHblDataset(pl.LightningDataModule):
         # Nothing to do here (yet)
         pass
 
-def collate_function_builder(epsilon : int, load_frames : bool, mix_video : callable = None, position_format : str = "graph_per_sequence", relative_positions: bool = False):
+def collate_function_builder(
+        epsilon : int,
+        load_frames : bool,
+        mix_video : callable = None,
+        position_format : str = "graph_per_sequence",
+        relative_positions: bool = False
+    ):
 
     def multimodal_collate(instances : list):
         """Collate function that batches both position data and video data.
