@@ -19,14 +19,15 @@ trainer: # logger extra
   accelerator: "gpu"
   precision: 32
   num_sanity_val_steps: 1
+  profiler: advanced
 
 data:
   name: LitResampledHblDataset
   params:
     meta_path: "/nfs/home/rhotertj/datasets/hbl/"
-    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta30_train.jsonl"
-    idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta30_val.jsonl"
-    idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta30_test.jsonl"
+    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/False/sql_sr/16x2/mode/matches/upsampled/False/meta30_train.jsonl"
+    idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/False/sql_sr/16x2/mode/matches/upsampled/False/meta30_val.jsonl"
+    idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/False/sql_sr/16x2/mode/matches/upsampled/False/meta30_test.jsonl"
     seq_len: 16
     sampling_rate: 2
     load_frames: true
@@ -60,6 +61,7 @@ model:
   params:
     pretrained_path: "/nfs/home/rhotertj/Code/thesis/models/mvit_b_16x4.pt"
     head_type: "twin"
+    netvlad_clusters: 16
 
 lit_model:
   name: LitModel
@@ -69,7 +71,7 @@ loss_func: twin_head_loss
 optimizer:
   name: SGD
   params:
-    lr: 0.003
+    lr: 0.0001
     momentum: 0.9
     weight_decay: 1e-4
 

@@ -24,9 +24,9 @@ data:
   name: LitResampledHblDataset
   params:
     meta_path: "/nfs/home/rhotertj/datasets/hbl/"
-    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta30_train.jsonl"
-    idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta30_val.jsonl"
-    idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/meta30_test.jsonl"
+    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/False/overlap/True/sql_sr/16x2/mode/matches/upsampled/False/meta30_train.jsonl"
+    idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/False/overlap/True/sql_sr/16x2/mode/matches/upsampled/False/meta30_val.jsonl"
+    idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/False/overlap/True/sql_sr/16x2/mode/matches/upsampled/False/meta30_test.jsonl"
     seq_len: 16
     sampling_rate: 2
     load_frames: true
@@ -34,7 +34,7 @@ data:
     epsilon : 7
     mix_video: true
     position_format: "flattened"
-    relative_positions: false
+    relative_positions: true
   transforms:
     - name: vt.FrameSequenceToTensor
     - name: vt.RandomHorizontalFlipVideo
@@ -63,6 +63,7 @@ model:
     video_model_name: make_kinetics_mvit
     video_model_params:
       pretrained_path: models/mvit_b_16x4.pt
+      netvlad_clusters: 0
     video_model_ckpt: /nfs/home/rhotertj/Code/thesis/experiments/mvit/train/blooming-hill-271/epoch=6-val_acc=0.85.ckpt
     graph_model_name: PositionTransformer
     graph_model_params:
@@ -70,14 +71,14 @@ model:
       dim_h: 256
       input_operation: "linear"
       num_heads: 8
-    graph_model_ckpt: /nfs/home/rhotertj/Code/thesis/experiments/posT/train/robust-frog-186/epoch=25-val_acc=0.61.ckpt
+    graph_model_ckpt: /nfs/home/rhotertj/Code/thesis/experiments/posT/train/stellar-commander-188/epoch=12-val_acc=0.63.ckpt
     train_head_only: False
-    head_type: twin
+    head_type: basic
 
 lit_model:
   name: LitModel
 
-loss_func: twin_head_loss
+loss_func: unweighted_cross_entropy
 
 optimizer:
   name: SGD

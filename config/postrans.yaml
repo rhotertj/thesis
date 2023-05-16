@@ -34,7 +34,7 @@ data:
     epsilon : 7
     mix_video: false
     position_format: "flattened"
-    relative_positions: false
+    relative_positions: true
   transforms: null
 
 model:
@@ -44,13 +44,13 @@ model:
     dim_h: 256
     input_operation: "linear"
     num_heads: 8
-    head_type: twin
+    head_type: classify
 
 
 lit_model:
   name: LitModel
 
-loss_func: twin_head_loss
+loss_func: unweighted_cross_entropy
 
 optimizer:
   name: SGD
