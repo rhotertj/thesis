@@ -106,7 +106,12 @@ def average_mAP(pred_confidences: np.ndarray, pred_anchors: np.ndarray, gt_label
                 tp = len(tp_idx)
                 # false positive: predictions outside of any window
                 fp = len(fp_idx)
-                r, p = recall_precision(tp, fp, fn)
+                #r, p = recall_precision(tp, fp, fn)
+                if len(pred_anchors_threshold) == 0:
+                    p = 0
+                else:
+                    p = tp / len(pred_anchors_threshold)
+                r = tp / len(gt_anchors_c)
                 # print(f"{delta=} {threshold=} {c=}: {tp=}, {fp=}, {fn=} {r=} {p=}")
                 assert r*p <= 1, f"{r=} {p=}"
 
