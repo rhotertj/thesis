@@ -1,10 +1,11 @@
 import torch
 import torch.nn.functional as F
 from pytorchvideo.models.vision_transformers import create_multiscale_vision_transformers
-from pytorchvideo.models.head import create_vit_basic_head, SequencePool
-from heads import MViTTwinHead
+from pytorchvideo.models.head import SequencePool
+from heads import create_mvit_twin_head, create_vit_vlad_head
+from pooling import NetVLAD
 
-def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str, batch_size : int):
+def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str, batch_size : int, netvlad_clusters : int):
     spatial_size = 224
     temporal_size = 16
     embed_dim_mul = [[1, 2.0], [3, 2.0], [14, 2.0]]
@@ -33,24 +34,35 @@ def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str
     out_dim = y.shape[-1]
 
     if head_type == "classify":
-        new_head = create_vit_basic_head(
-                in_features=out_dim,
-                out_features=num_classes,
-                seq_pool_type="cls",
-                dropout_rate=0.5,
-                activation=torch.nn.Softmax,
-            )
+        new_head = create_vit_vlad_head(
+            in_features=out_dim,
+            n_clusters=netvlad_clusters,
+            out_features=num_classes,
+            seq_pool_type="cls",
+            dropout_rate=0.5,
+            activation=torch.nn.Softmax,
+        )
     elif head_type == "pool":
         new_head = SequencePool("cls")
+        
+        if netvlad_clusters > 0:
+            netvlad = NetVLAD(
+                dim=768,
+                num_clusters=netvlad_clusters
+            )
+            new_head = torch.nn.Sequential(new_head, netvlad)
+
     elif head_type == "twin":
-        new_head = MViTTwinHead(
-            dim_in=out_dim,
+        new_head = create_mvit_twin_head(
+            dim_in=768,
             num_classes=num_classes,
+            n_clusters=netvlad_clusters,
             activation=F.relu,
-            dropout=0.4
+            dropout=0.5
         )
     else:
         raise NotImplementedError(f"Unknown head type {head_type}")
+    
     model.head = new_head
 
     return model
@@ -61,19 +73,39 @@ if __name__ == "__main__":
     import torch
     import numpy as np
     from torchvision.transforms.functional import center_crop
+    from lit_data import collate_function_builder
+    from torchvision import transforms as t
+    import video_transforms as vt
 
-    model = make_kinetics_mvit("models/mvit_b_16x4.pt", 2)
+    model = make_kinetics_mvit("models/mvit_b_16x4.pt", num_classes=3, batch_size=8, netvlad_clusters=4, head_type="classify")
 
     model.eval()
-    data = MultiModalHblDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", 16, sampling_rate=4)
-    x = data[15525]
+    basic_transforms = t.Compose([
+            vt.FrameSequenceToTensor(),
+            t.Resize((224,224))
+            ])
 
-    x = x["frames"]
-    x = np.transpose(x, (3, 0, 1, 2))
-    x = torch.Tensor(x).unsqueeze(0)
-    x = center_crop(x, 224)
+    collate_fn = collate_function_builder(
+        epsilon=7,
+        load_frames=True,
+        mix_video=None,
+        position_format="flattened",
+        relative_positions=False
+        )
 
+    dataset = MultiModalHblDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", 16, sampling_rate=2, transforms=basic_transforms, overlap=False)
+
+    instances = []
+    for i in range(8):
+        x = dataset[i*25]
+        instances.append(x)
+
+    batch = collate_fn(instances)
+
+    x = batch["frames"]
     y = model(x)
-    print(y.shape, y.argmax())
-
+    if isinstance(y, tuple):
+        print(y[0].shape, y[1].shape)
+    else:
+        print(y.shape)
 
