@@ -230,7 +230,7 @@ if "__main__" == __name__:
     parser.add_argument(
         '--overlap',
         help="Whether to use overlapping sliding windows. Ignored when --balanced is True.",
-        default=True,
+        default=False,
         action='store_true'
     )
     parser.add_argument('--sequence_length', type=int, help="Sequence length.")
