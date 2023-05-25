@@ -35,12 +35,12 @@ data:
     epsilon : 7
     mix_video: True
   transforms: 
-    - name: vt.FrameSequenceToTensor
-    - name: vt.RandomHorizontalFlipVideo
+    - name: mmt.FrameSequenceToTensor
+    - name: mmt.RandomHorizontalFlipVideo
       params:
         p: 0.5
-    - name: vt.TimeFirst
-    - name: t.ColorJitter
+    - name: mmt.TimeFirst
+    - name: mmt.ColorJitter
       params:
         brightness: 0.2
         hue: 0.2
@@ -51,8 +51,8 @@ data:
     #     num_layers: 3
     #     prob: 0.5
     #     magnitude: 5
-    - name: vt.ChannelFirst
-    - name: t.Resize
+    - name: mmt.ChannelFirst
+    - name: mmt.Resize
       params:
         size: [224, 224]
 
