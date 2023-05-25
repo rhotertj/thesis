@@ -9,6 +9,7 @@ floodlight
 networkx
 OmegaConf
 notebook
+floodlight
 # dgllife # for model zoo
 # rdkit
 

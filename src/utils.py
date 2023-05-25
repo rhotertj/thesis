@@ -8,7 +8,7 @@ import torch.utils.data
 from data.labels import LabelDecoder
 import networkx as nx
 from data.data_utils import PositionContainer
-
+from floodlight.vis.pitches import plot_handball_pitch
 
 def get_proportions_df(
     dataset: torch.utils.data.Dataset,
@@ -42,7 +42,7 @@ def plot_confmat(confmat):
     return fig
 
 
-def draw_trajectory(positions: PositionContainer):
+def draw_trajectory(positions: PositionContainer, ax=None):
     """Plots player and ball positions as a scatterplot.
     Positions of the past become transparent.
 
@@ -57,11 +57,12 @@ def draw_trajectory(positions: PositionContainer):
     ball = positions.ball
     T = team_a.shape[0]
     # start new figure, toss the old one
-    plt.close()
-    fig = plt.figure()
+    if ax is None:
+        ax = plt.subplots()[1]
+    plot_handball_pitch(xlim=(0,40), ylim=(0,20), unit='m', color_scheme='standard', show_axis_ticks=True, ax=ax)
     # plot config
-    plt.xlim(0, 40)
-    plt.ylim(0, 20)
+    # plt.xlim(0, 40)
+    # plt.ylim(0, 20)
 
     colors = ["red", "green", "blue"]
     for i, pos in enumerate([team_a, team_b, ball]):
@@ -75,10 +76,11 @@ def draw_trajectory(positions: PositionContainer):
                     x=[x_t],
                     color=colors[i],
                     legend=False,
-                    alpha=a
+                    alpha=a,
+                    ax=ax
                 )
 
-    return fig
+    return ax
 
 def array2gif(arr: np.ndarray, out_path: str, fps: int):
     """Turns a stack of frames into a gif.
