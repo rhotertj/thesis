@@ -148,10 +148,8 @@ class MultiModalHblDataset(Dataset):
         # for in loop does not care for size of iterator but goes on until index error is raised
         if idx >= len(self):
             raise IndexError(f"{idx} out of range for dataset size {len(self)}")
-
         if not self.overlap:
-            idx *= (self.seq_half * self.sampling_rate)
-
+            idx *= (self.seq_len * self.sampling_rate)
         if frame_idx is None:
             # Get correct match based on idx (match_number) and idx with respect to match and availability (frame_idx)
             # from idx with respect to dataset (param: idx)

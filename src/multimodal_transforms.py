@@ -168,10 +168,9 @@ class Translate:
         self.y_std = y_std
         
     def __call__(self, mm_data) -> Any:
-        
         translate_x = numpy.random.normal(self.mean, self.x_std)
         translate_y = numpy.random.normal(self.mean, self.y_std)
-        print("Translate x y", translate_x, translate_y)
+
         mm_data["positions"].team_a[:, :, 0] += translate_x # longer side, x
         mm_data["positions"].team_a[:, :, 1] += translate_y
 

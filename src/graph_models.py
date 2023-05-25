@@ -154,7 +154,7 @@ class PositionTransformer(torch.nn.Module):
         # TODO: Class token with cls pooling
         self.input_layer = InputLayer(dim_in, dim_h, op=input_operation, batch_size=batch_size)
         dim_h = self.input_layer.get_output_size() # must be divisible by num_heads
-        layer = torch.nn.TransformerEncoderLayer(d_model=dim_h, nhead=num_heads)
+        layer = torch.nn.TransformerEncoderLayer(d_model=dim_h, nhead=num_heads, batch_first=True)
         self.transformer = torch.nn.TransformerEncoder(layer, num_layers=6)
         if head_type == "classify":
             self.head = create_default_head(input_dim=dim_h, output_dim=num_classes, activation=F.relu, dropout=0.3)

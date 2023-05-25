@@ -47,14 +47,14 @@ def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str
         
         if netvlad_clusters > 0:
             netvlad = NetVLAD(
-                dim=768,
+                dim=out_dim,
                 num_clusters=netvlad_clusters
             )
             new_head = torch.nn.Sequential(new_head, netvlad)
 
     elif head_type == "twin":
         new_head = create_mvit_twin_head(
-            dim_in=768,
+            dim_in=out_dim,
             num_classes=num_classes,
             n_clusters=netvlad_clusters,
             activation=F.relu,
