@@ -94,59 +94,52 @@ def time_split_dataframe(df: pd.DataFrame, val_size: float = 0.15, test_size: fl
     return train_idx, val_idx, test_idx
 
 
-def load_split_matches_df(data_path: Path, sequence_length: int, sampling_rate: int, overlap: bool, balanced: bool):
+def load_split_matches_df(data_path: Path, sequence_length: int, sampling_rate: int, overlap: bool):
 
-    overlaps = [overlap]
-    if balanced:
-        overlaps = (True, False)
+    trainset = MultiModalHblDataset(
+        meta_path=data_path / f"{META_FILE}_train.csv",
+        seq_len=sequence_length,
+        sampling_rate=sampling_rate,
+        load_frames=False,
+        overlap=overlap
+    )
+    valset = MultiModalHblDataset(
+        meta_path=data_path / f"{META_FILE}_valid.csv",
+        seq_len=sequence_length,
+        sampling_rate=sampling_rate,
+        load_frames=False,
+        overlap=overlap
+    )
+    testset = MultiModalHblDataset(
+        meta_path=data_path / f"{META_FILE}_test.csv",
+        seq_len=sequence_length,
+        sampling_rate=sampling_rate,
+        load_frames=False,
+        overlap=overlap
+    )
 
-    dfs = []
-    for _overlap in overlaps:
-        trainset = MultiModalHblDataset(
-            meta_path=data_path / f"{META_FILE}_train.csv",
-            seq_len=sequence_length,
-            sampling_rate=sampling_rate,
-            load_frames=False,
-            overlap=_overlap
-        )
-        valset = MultiModalHblDataset(
-            meta_path=data_path / f"{META_FILE}_valid.csv",
-            seq_len=sequence_length,
-            sampling_rate=sampling_rate,
-            load_frames=False,
-            overlap=_overlap
-        )
-        testset = MultiModalHblDataset(
-            meta_path=data_path / f"{META_FILE}_test.csv",
-            seq_len=sequence_length,
-            sampling_rate=sampling_rate,
-            load_frames=False,
-            overlap=_overlap
-        )
+    train_df = create_dataframe_from_dataset(trainset)
+    val_df = create_dataframe_from_dataset(valset)
+    test_df = create_dataframe_from_dataset(testset)
 
-        train_df = create_dataframe_from_dataset(trainset)
-        val_df = create_dataframe_from_dataset(valset)
-        test_df = create_dataframe_from_dataset(testset)
-        dfs.append((train_df, val_df, test_df))
-
-    return dfs
+    return train_df, val_df, test_df
 
 
-def balance_classes(overlap_df: pd.DataFrame, chunk_df: pd.DataFrame, background_size: float, upsample=True) -> pd.DataFrame:
+def balance_classes(df: pd.DataFrame, background_size: float, upsample=True) -> pd.DataFrame:
     if upsample:
-        overlapped_passes = overlap_df[overlap_df.class_coarse == "Pass"]
-        overlapped_shots = overlap_df[overlap_df.class_coarse == "Shot"].sample(len(overlapped_passes), replace=True)
+        overlapped_passes = df[df.class_coarse == "Pass"]
+        overlapped_shots = df[df.class_coarse == "Shot"].sample(len(overlapped_passes), replace=True)
     
     else:
-        overlapped_shots = overlap_df[overlap_df.class_coarse == "Shot"]
-        overlapped_passes = overlap_df[overlap_df.class_coarse == "Pass"].iloc[:len(overlapped_shots)]
+        overlapped_shots = df[df.class_coarse == "Shot"]
+        overlapped_passes = df[df.class_coarse == "Pass"].iloc[:len(overlapped_shots)]
     
     n_shots_passes = len(overlapped_passes) + len(overlapped_shots)
     frac_shots_passes = 1 - background_size
     n_background = int((n_shots_passes / frac_shots_passes) * background_size)
 
     print("Sampling n background", n_background, "for shots and passes:", n_shots_passes)
-    overlapped_background = overlap_df[overlap_df.shot.isnull()].sample(n_background, replace=n_background > len(overlap_df[overlap_df.shot.isnull()]))
+    overlapped_background = df[df.shot.isnull()].sample(n_background, replace=n_background > len(df[df.shot.isnull()]))
     balanced_df = pd.concat([overlapped_passes, overlapped_background, overlapped_shots])
     balanced_df.sort_values(by=["frame_idx"], inplace=True)
     balanced_df.reset_index(inplace=True, drop=True)
@@ -260,17 +253,16 @@ if "__main__" == __name__:
     #   Save splits separately
     if args.mode == 'matches':
         split_match_dfs = load_split_matches_df(
-            args.data_path, args.sequence_length, args.sampling_rate, args.overlap, args.balanced
+            args.data_path, args.sequence_length, args.sampling_rate, args.overlap
         )
         splits = {}
         if args.balanced:
-            overlapped_dfs, chunk_dfs = split_match_dfs
-            for split, overlap_df, chunk_df in zip(["train", "val", "test"], overlapped_dfs, chunk_dfs):
-                split_df = balance_classes(overlap_df, chunk_df, args.background_size)
+            for split, df in zip(["train", "val", "test"], split_match_dfs):
+                split_df = balance_classes(df, args.background_size, upsample=args.upsample)
                 splits[split] = split_df
 
         else:
-            for split, df in zip(["train", "val", "test"], split_match_dfs[0]):
+            for split, df in zip(["train", "val", "test"], split_match_dfs):
                 splits[split] = df
 
         for split, df in splits.items():
@@ -283,32 +275,25 @@ if "__main__" == __name__:
     #   Load complete dataset
     #   Split either randomly or along dataset by size ('time')
     if args.mode in ('time', 'random'):
-        overlaps = [args.overlap]
-        if args.balanced:
-            overlaps = (True, False)
+       
+        dataset = MultiModalHblDataset(
+            meta_path=args.data_path / f"{META_FILE}.csv",
+            seq_len=args.sequence_length,
+            sampling_rate=args.sampling_rate,
+            load_frames=False,
+            overlap=args.overlap
+        )
 
-        dfs = []
-        for _overlap in overlaps:
-            dataset = MultiModalHblDataset(
-                meta_path=args.data_path / f"{META_FILE}.csv",
-                seq_len=args.sequence_length,
-                sampling_rate=args.sampling_rate,
-                load_frames=False,
-                overlap=_overlap
-            )
-            df = create_dataframe_from_dataset(dataset)
-            dfs.append(df)
+        df = create_dataframe_from_dataset(dataset)
 
         if args.balanced:
-            overlap_df, chunk_df = dfs
-            balanced_df = balance_classes(overlap_df, chunk_df, args.background_size)
-            dfs = [balanced_df]
+            balanced_df = balance_classes(df, args.background_size, args.upsample)
 
         if args.mode == "time":
-            train_idx, val_idx, test_idx = time_split_dataframe(dfs[0], args.val_size, args.test_size)
+            train_idx, val_idx, test_idx = time_split_dataframe(df, args.val_size, args.test_size)
 
         if args.mode == "random":
-            train_idx, val_idx, test_idx = random_split_dataframe(dfs[0], args.val_size, args.test_size)
+            train_idx, val_idx, test_idx = random_split_dataframe(df, args.val_size, args.test_size)
 
         for split, idx in zip(["train", "val", "test"], [train_idx, val_idx, test_idx]):
             fname = fpath / f"{META_FILE}_{split}.jsonl"
