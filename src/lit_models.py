@@ -3,10 +3,7 @@ import pytorch_lightning as pl
 import pytorchvideo
 import torchmetrics as tm
 import wandb
-from torchvision.transforms.functional import center_crop
 import numpy as np
-import seaborn as sns
-import itertools
 import pickle as pkl
 from pathlib import Path
 
@@ -15,7 +12,7 @@ from graph_models import GAT, PositionTransformer, GIN, GCN
 from multimodal_models import MultiModalModel
 
 from metrics import average_mAP, postprocess_predictions
-from data.labels import LabelDecoder
+from data import LabelDecoder
 
 
 class LitModel(pl.LightningModule):

@@ -22,7 +22,7 @@ from video_models import make_kinetics_mvit
 from graph_models import GAT, PositionTransformer, GIN, GCN
 from multimodal_models import MultiModalModel
 from lit_data import LitMultiModalHblDataset, LitResampledHblDataset
-from data.labels import LabelDecoder
+from data import LabelDecoder
 from utils import get_proportions_df
 
 

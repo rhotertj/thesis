@@ -5,9 +5,8 @@ import pandas as pd
 import numpy as np
 from PIL import Image
 import torch.utils.data
-from data.labels import LabelDecoder
 import networkx as nx
-from data.data_utils import PositionContainer
+from data import PositionContainer, LabelDecoder
 from floodlight.vis.pitches import plot_handball_pitch
 
 def get_proportions_df(
@@ -32,15 +31,6 @@ def get_proportions_df(
         proportions.append({"name": label_decoder.class_names[cls], "n": n, "proportion": n / len(dataset)})
 
     return pd.DataFrame(proportions)
-
-
-def plot_confmat(confmat):
-    plt.close()
-    fig = plt.figure()
-    sns.set(font_scale=1.4)  # for label size
-    sns.heatmap(confmat, annot=True, annot_kws={"size": 16})  # font size
-    return fig
-
 
 def draw_trajectory(positions: PositionContainer, ax=None):
     """Plots player and ball positions as a scatterplot.

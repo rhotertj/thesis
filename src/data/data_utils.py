@@ -152,6 +152,7 @@ class PositionContainer:
                     # team indicator is a position 0
                     dist = torch.linalg.norm(positions[t, a1, 1:3] - positions[t, a2, 1:3])
                     if dist < epsilon:
+                        # TODO: More intelligent to divide by eps?
                         rel_dist = dist / self.max_dist
                         G = dgl.add_edges(G, [a1, a2], [a2, a1], data={"w" : torch.Tensor([rel_dist, rel_dist])})
             else:

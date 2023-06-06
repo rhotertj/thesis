@@ -1,6 +1,5 @@
 from typing import Any
 import torch
-from torch import Tensor
 import torchvision.transforms.functional as F
 from torchvision import transforms as t
 import numpy
