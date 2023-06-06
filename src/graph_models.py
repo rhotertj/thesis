@@ -1,12 +1,8 @@
 import torch
 import torch.nn as nn
-from dgl.nn import GATv2Conv, GraphConv
+from dgl.nn import GATConv, GATv2Conv, GraphConv
 import dgl
 import torch.nn.functional as F
-import networkx as nx
-import itertools
-import numpy as np
-from data.data_utils import create_graph
 from heads import create_default_head, BasicTwinHead
 from pooling import MeanPool
 
@@ -39,13 +35,13 @@ class GAT(torch.nn.Module):
         """    	
         super().__init__()
         self.use_head = use_head
-        self.mean_pool = MeanPool(dim=1)
+        self.pool = MeanPool(dim=1)
 
         self.input_layer = InputLayer(dim_in=dim_in, dim_h=dim_h, op=input_operation, batch_size=batch_size)
         self.gat_layers = [GATv2Conv(self.input_layer.get_output_size(), dim_h, num_heads=num_heads, feat_drop=0.4)]
 
-        for _ in range(num_layers):
-            gat_layer = GATv2Conv(dim_h, dim_h, num_heads=num_heads, activation=F.leaky_relu)
+        for _ in range(num_layers - 1):
+            gat_layer = GATv2Conv(dim_h, dim_h, num_heads=num_heads)
             self.gat_layers.append(gat_layer)
             
         self.gat_layers = nn.ModuleList(self.gat_layers)
@@ -59,7 +55,8 @@ class GAT(torch.nn.Module):
         # graph attention
         for layer in self.gat_layers:
             h = layer(g, h)
-            h = self.mean_pool(h)
+            h = self.relu(h)
+            h = self.pool(h)
         # readout function (handles batched graph)
         g.ndata["h"] = h
         h = dgl.readout_nodes(g, "h", op=self.readout)
@@ -183,6 +180,7 @@ class GCN(torch.nn.Module):
         readout: str = "mean",
         num_heads: int = 8,
         use_head: bool = True,
+        temporal_pooling: bool = True
     ) -> None:
         super().__init__()
         self.use_head = use_head
@@ -197,26 +195,39 @@ class GCN(torch.nn.Module):
             in_feats=dim_h,
             out_feats=dim_h
         )
+        
+        self.temporal_pooling = temporal_pooling
         layer = torch.nn.TransformerEncoderLayer(d_model=dim_h, nhead=num_heads)
         self.transformer = torch.nn.TransformerEncoder(layer, num_layers=2)
         self.head = create_default_head(dim_h, num_classes, F.relu, 0.3)
 
+        self.relu = nn.ReLU()
+        self.norm = nn.BatchNorm1d(num_features=dim_in)
+
+
     def forward(self, g, g_feats, edge_weights=None):
         # NOTE: This function uses a batched graph for one sequence, one graph per timestep.
-        h = self.input_layer(g_feats)
+        h = self.norm(g_feats)
+        h = self.input_layer(h)
 
         h = self.gcn1(g, h, edge_weight=edge_weights)
+        h = self.relu(h)
         h = self.gcn2(g, h, edge_weight=edge_weights)
+        h = self.relu(h)
 
         g.ndata["h"] = h
         h = dgl.readout_nodes(g, "h", op=self.readout)
 
-        g_repr = self.transformer(h)
-        g_repr = h.mean(dim=0)
+        if self.temporal_pooling:
+            g_repr = self.transformer(h)
+            g_repr = g_repr.mean(dim=0, keepdim=True)
+        else:
+            g_repr = h
 
         if not self.use_head:
             return g_repr
-        return self.head(g_repr).unsqueeze(0) # unsqueeze for cross entropy loss
+        
+        return self.head(g_repr) # unsqueeze for cross entropy loss
         
 
 
@@ -298,29 +309,32 @@ if __name__ == "__main__":
     from torchvision import transforms as t
     import multimodal_transforms as mmt
 
+    bs = 1
+
     basic_transforms = t.Compose([
             mmt.FrameSequenceToTensor(),
             mmt.Resize(size=(224,224))
             ])
 
     collate_fn_flat = collate_function_builder(7, True, None, "flattened")
-    collate_fn_graph = collate_function_builder(7, True, None, "graph_per_sequence")
+    collate_fn_graph = collate_function_builder(7, True, None, "graph_per_timestep")
 
     dataset = MultiModalHblDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", 16, sampling_rate=4, transforms=basic_transforms, overlap=False, load_frames=False)
 
     instances = []
-    for i in range(8):
+    for i in range(bs):
         x = dataset[i*25]
         instances.append(x)
 
     flat_batch = collate_fn_flat(instances)
     graph_batch = collate_fn_graph(instances)
 
-    model = PositionTransformer(49, 128, 3, 8, True)
-    print(flat_batch["positions"].shape)
-    print(model(flat_batch["positions"]))
+    #model = PositionTransformer(49, 128, 3, "linear", batch_size=8, num_heads=8)
+    #print(flat_batch["positions"].shape)
+    #print(model(flat_batch["positions"]))
 
-    gmodel = GAT(49, 128, 3, "linear", 8)
     print(graph_batch["positions"].ndata["positions"].shape)
+    gmodel = GCN(4, 64, 3, "linear", bs, "mean", 8, True)
+    #gmodel = GCN(49, 128, 3, "linear", bs, "mean", 8, True, False)
     print(gmodel(graph_batch["positions"], graph_batch["positions"].ndata["positions"]))
     
