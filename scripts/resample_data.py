@@ -216,7 +216,7 @@ if "__main__" == __name__:
     parser.add_argument("--mode", type=str, help='Splitting criterion.', choices=['matches', 'random', 'time'])
     parser.add_argument("--val_size", type=float, help="Split size of validation set.", default=0.15)
     parser.add_argument("--test_size", type=float, help="Split size of test set.", default=0.15)
-    parser.add_argument("--background_size", type=float, default=0.6, help="Proportion of the background class when balancing proportions.")
+    parser.add_argument("--background_size", type=float, default=0.4, help="Proportion of the background class when balancing proportions.")
     parser.add_argument(
         "--balanced", help="Whether upsampling of underrepresented classes takes place.", default=False, action='store_true'
     )
@@ -287,7 +287,7 @@ if "__main__" == __name__:
         df = create_dataframe_from_dataset(dataset)
 
         if args.balanced:
-            balanced_df = balance_classes(df, args.background_size, args.upsample)
+            df = balance_classes(df, args.background_size, args.upsample)
 
         if args.mode == "time":
             train_idx, val_idx, test_idx = time_split_dataframe(df, args.val_size, args.test_size)
@@ -297,7 +297,7 @@ if "__main__" == __name__:
 
         for split, idx in zip(["train", "val", "test"], [train_idx, val_idx, test_idx]):
             fname = fpath / f"{META_FILE}_{split}.jsonl"
-            split_df = dfs[0].iloc[idx]
+            split_df = df.iloc[idx]
             split_df.reset_index(inplace=True, drop=True)
             print(split_df.value_counts(["class_coarse"]))
             print("Writing to", fname)
