@@ -1,11 +1,11 @@
 import torch
 import torch.nn.functional as F
 from pytorchvideo.models.vision_transformers import create_multiscale_vision_transformers
-from pytorchvideo.models.head import SequencePool
-from heads import create_mvit_twin_head, create_vit_vlad_head
+from pytorchvideo.models.head import SequencePool, create_vit_basic_head
+from heads import create_mvit_twin_head
 from pooling import NetVLAD
 
-def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str, batch_size : int, netvlad_clusters : int):
+def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str, batch_size : int):
     spatial_size = 224
     temporal_size = 16
     embed_dim_mul = [[1, 2.0], [3, 2.0], [14, 2.0]]
@@ -34,9 +34,8 @@ def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str
     out_dim = y.shape[-1]
 
     if head_type == "classify":
-        new_head = create_vit_vlad_head(
+        new_head = create_vit_basic_head(
             in_features=out_dim,
-            n_clusters=netvlad_clusters,
             out_features=num_classes,
             seq_pool_type="cls",
             dropout_rate=0.5,
@@ -44,19 +43,11 @@ def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str
         )
     elif head_type == "pool":
         new_head = SequencePool("cls")
-        
-        if netvlad_clusters > 0:
-            netvlad = NetVLAD(
-                dim=out_dim,
-                num_clusters=netvlad_clusters
-            )
-            new_head = torch.nn.Sequential(new_head, netvlad)
 
     elif head_type == "twin":
         new_head = create_mvit_twin_head(
             dim_in=out_dim,
             num_classes=num_classes,
-            n_clusters=netvlad_clusters,
             activation=F.relu,
             dropout=0.5
         )
