@@ -37,6 +37,7 @@ class PositionContainer:
         self.T = self.team_a.shape[-3]
         self.N = 15
         self.max_dist = 44.8 # pythagoras, diagonal of court size 40x20
+        self.player_order = torch.arange(0, self.N) # this determines player order and can be altered to shuffle
 
     def __repr__(self) -> str:
         return f"Position Container for {self.T} time steps ({self.mirror_horizontal=}, {self.mirror_vertical=})"
@@ -204,7 +205,7 @@ class PositionContainer:
 
         return all_pos
 
-    def as_flattened(self, normalize=True, relative_positions: bool = False) -> torch.Tensor:
+    def as_flattened(self, normalize=True, relative_positions: bool = False, team_indicator: bool = True) -> torch.Tensor:
         """Returns the positions with separate dimension for Players (N) and positions over time (T*C).
         A team indicator per player is inserted at position 0.
 
@@ -221,15 +222,16 @@ class PositionContainer:
             all_pos[:, 1::3] /= 20
         if relative_positions:
             all_pos[:-1] -= all_pos[-1]
+        if team_indicator:
+            indicator = torch.concatenate([
+                torch.zeros(7),
+                torch.ones(7),
+                torch.Tensor([2])
+            ]).reshape(-1, 1)
+            # concat agents along agent dimension, add team indicator per agent
+            all_pos = torch.concatenate([indicator, all_pos], dim=-1)
 
-        indicator = torch.concatenate([
-            torch.zeros(7),
-            torch.ones(7),
-            torch.Tensor([2])
-        ]).reshape(-1, 1)
-        # concat agents along agent dimension, add team indicator per agent
-        all_pos = torch.concatenate([indicator, all_pos], dim=-1)
-        return all_pos
+        return all_pos[self.player_order]
 
 
 def combine_teams_with_indicator(team_a: np.ndarray, team_b: np.ndarray) -> np.ndarray:
