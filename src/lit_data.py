@@ -32,7 +32,8 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
         mix_video : bool = True,
         video_transforms : t.Compose = None,
         position_format : str = "graph_per_sequence",
-        relative_positions: bool = False
+        relative_positions: bool = False,
+        team_indicator : bool = True,
         ) -> None:
 
         super().__init__()
@@ -56,11 +57,11 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
 
         if mix_video:
             video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes, mixup_alpha=0.8)
-            self.train_collate = collate_function_builder(epsilon, load_frames, video_transform, position_format=position_format, relative_positions=relative_positions)
+            self.train_collate = collate_function_builder(epsilon, load_frames, video_transform, position_format=position_format, relative_positions=relative_positions, team_indicator=team_indicator)
         else:
-            self.train_collate = collate_function_builder(epsilon, load_frames, position_format=position_format, relative_positions=relative_positions)
+            self.train_collate = collate_function_builder(epsilon, load_frames, position_format=position_format, relative_positions=relative_positions, team_indicator=team_indicator)
         
-        self.val_collate = collate_function_builder(epsilon, load_frames, position_format=position_format, relative_positions=relative_positions)
+        self.val_collate = collate_function_builder(epsilon, load_frames, position_format=position_format, relative_positions=relative_positions, team_indicator=team_indicator)
 
 
     def setup(self, stage : str):
@@ -145,7 +146,8 @@ class LitResampledHblDataset(pl.LightningDataModule):
         mix_video : bool = True,
         video_transforms : t.Compose = None,
         position_format : str = "graph_per_sequence",
-        relative_positions: bool = False
+        relative_positions: bool = False,
+        team_indicator : bool = True,
         ) -> None:
         super().__init__()
 
@@ -168,11 +170,11 @@ class LitResampledHblDataset(pl.LightningDataModule):
 
         if mix_video:
             video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes, mixup_alpha=0.8, cutmix_prob=0)
-            self.train_collate = collate_function_builder(epsilon, load_frames, video_transform, position_format, relative_positions=relative_positions)
+            self.train_collate = collate_function_builder(epsilon, load_frames, video_transform, position_format, relative_positions=relative_positions, team_indicator=team_indicator)
         else:
-            self.train_collate = collate_function_builder(epsilon, load_frames, position_format=position_format, relative_positions=relative_positions)
+            self.train_collate = collate_function_builder(epsilon, load_frames, position_format=position_format, relative_positions=relative_positions, team_indicator=team_indicator)
         
-        self.val_collate = collate_function_builder(epsilon, load_frames, position_format=position_format, relative_positions=relative_positions)
+        self.val_collate = collate_function_builder(epsilon, load_frames, position_format=position_format, relative_positions=relative_positions, team_indicator=team_indicator)
 
 
     def setup(self, stage : str):
@@ -243,7 +245,8 @@ def collate_function_builder(
         load_frames : bool,
         mix_video : callable = None,
         position_format : str = "graph_per_sequence",
-        relative_positions: bool = False
+        relative_positions: bool = False,
+        team_indicator:bool = True
     ):
 
     def multimodal_collate(instances : list):
@@ -278,7 +281,7 @@ def collate_function_builder(
                 if position_format == "graph_per_sequence":
                     batch[k] = dgl.batch([instance[k].as_graph_per_sequence(epsilon, relative_positions) for instance in instances])
                 if position_format == "flattened":
-                    batch[k] = torch.stack([instance[k].as_flattened(epsilon, relative_positions) for instance in instances])
+                    batch[k] = torch.stack([instance[k].as_flattened(normalize=True, relative_positions=relative_positions, team_indicator=team_indicator) for instance in instances])
                 if position_format == "graph_per_timestep":
                     batch[k] = dgl.batch(instances[0][k].as_graph_per_timestep(epsilon))
 
