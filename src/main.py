@@ -20,7 +20,7 @@ import multimodal_transforms as mmt
 from lit_models import LitModel, weighted_cross_entropy, unweighted_cross_entropy, twin_head_loss
 from video_models import make_kinetics_mvit
 from graph_models import GAT, PositionTransformer, GIN, GCN
-from multimodal_models import MultiModalModel
+from multimodal_models import MultiModalModel, NetVLADModel
 from lit_data import LitMultiModalHblDataset, LitResampledHblDataset
 from data import LabelDecoder
 from utils import get_proportions_df

@@ -1,8 +1,75 @@
 import torch
 
+from pooling import NetVLAD
 from video_models import make_kinetics_mvit
 from graph_models import GAT, GIN, PositionTransformer
 from heads import create_default_head, BasicTwinHead
+
+
+class NetVLADModel(torch.nn.Module):
+
+    def __init__(self,
+        model_name: str,
+        model_params : dict,
+        model_ckpt: str,
+        num_classes: int,
+        batch_size: int,
+        num_clusters: int,
+
+    ) -> None:
+        super().__init__()
+        self.representation_model = eval(model_name)(
+            **model_params,
+            num_classes=num_classes,
+            batch_size=batch_size,
+            head_type="pool",
+        )
+        self.load_representation_model(model_ckpt)
+
+        dim_h = model_params["dim_h"]
+        
+        self.vlad = NetVLAD(
+            num_clusters=num_clusters,
+            dim=dim_h,
+        )
+
+        self.head = create_default_head(
+            input_dim=dim_h,
+            output_dim=num_classes,
+            activation=torch.nn.functional.relu,
+            dropout=0.4
+        )
+
+
+    def load_representation_model(self, model_ckpt):
+        """Pytorch Lightning saves layer weights by prepending "model" to layer names.
+        If we do not want to load checkpoints for Lightning Modules but for plain torch models, we have to shorten dict keys. 
+
+        Args:
+            model_ckpt (str): Path to checkpoint file.
+        """        
+        ckpt = torch.load(model_ckpt)
+        state_dict = {}
+        for k, v in ckpt["state_dict"].items():
+            state_dict[k.removeprefix("model.")] = v
+        # do not load strict since we dont use the head
+        self.representation_model.load_state_dict(state_dict, strict=False)
+
+        for w in self.representation_model.parameters():
+                w.requires_grad = False
+
+
+    def forward(self, x):
+        if isinstance(self.representation_model, PositionTransformer):
+            repr = self.representation_model(x["positions"])
+        repr_dim = repr.shape[-1]
+        vlad = self.vlad(repr)
+        # vlad flattens residuals of representation to [B, clusters * dim]
+        # to compute mean over residuals, we unflatten to [B, dim, cluster]
+        repr = torch.unflatten(vlad, -1, (repr_dim, -1)).mean(-1)
+        return self.head(repr)
+
+
 
 class MultiModalModel(torch.nn.Module):
 
@@ -110,10 +177,9 @@ if "__main__" == __name__:
     from lit_data import collate_function_builder
     from torchvision import transforms as t
     import multimodal_transforms as mmt
-    import pytorchvideo.transforms as ptvt
 
     basic_transforms = t.Compose([
-            vt.FrameSequenceToTensor(),
+            mmt.FrameSequenceToTensor(),
             mmt.Resize(size=(224,224))
             ])
 
@@ -134,9 +200,31 @@ if "__main__" == __name__:
 
     batch = collate_fn(instances)
 
-    mm_model = MultiModalModel(
-        graph_model_name="PositionTransformer",
-        graph_model_params={
+    # mm_model = MultiModalModel(
+    #     graph_model_name="PositionTransformer",
+    #     graph_model_params={
+    #         "dim_in": 49,
+    #         "dim_h": 256,
+    #         # "readout": "mean",
+    #         "input_operation": "linear",
+    #         "num_heads": 8,
+    #         "batch_size": 8
+    #     },
+    #     video_model_name="make_kinetics_mvit",
+    #     video_model_params={
+    #         "pretrained_path": "models/mvit_b_16x4.pt",
+    #         "batch_size": 8
+    #     },
+    #     num_classes=3
+    # )
+    # mm_model.load_graph_model_from_ckpt("/nfs/home/rhotertj/Code/thesis/experiments/gat/train/comic-waterfall-163/epoch=99-step=474600.ckpt")
+    # mm_model.load_video_model_from_ckpt("/nfs/home/rhotertj/Code/thesis/experiments/mvit/train/silver-blaze-237/epoch=29-step=113910.ckpt")
+    # print("Done")
+    # mm_model(batch)
+
+    nvmodel = NetVLADModel(
+        model_name="PositionTransformer",
+        model_params={
             "dim_in": 49,
             "dim_h": 256,
             # "readout": "mean",
@@ -144,16 +232,11 @@ if "__main__" == __name__:
             "num_heads": 8,
             "batch_size": 8
         },
-        video_model_name="make_kinetics_mvit",
-        video_model_params={
-            "pretrained_path": "models/mvit_b_16x4.pt",
-            "batch_size": 8
-        },
-        num_classes=3
+        model_ckpt="/nfs/home/rhotertj/Code/thesis/experiments/posT/train/dutiful-universe-204/epoch=20-val_acc=0.83.ckpt",
+        num_classes=3,
+        batch_size=8,
+        num_clusters=64
     )
-    mm_model.load_graph_model_from_ckpt("/nfs/home/rhotertj/Code/thesis/experiments/gat/train/comic-waterfall-163/epoch=99-step=474600.ckpt")
-    mm_model.load_video_model_from_ckpt("/nfs/home/rhotertj/Code/thesis/experiments/mvit/train/silver-blaze-237/epoch=29-step=113910.ckpt")
-    print("Done")
-    mm_model(batch)
 
+    print(nvmodel(batch))
     

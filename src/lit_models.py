@@ -9,7 +9,7 @@ from pathlib import Path
 
 from video_models import make_kinetics_mvit
 from graph_models import GAT, PositionTransformer, GIN, GCN
-from multimodal_models import MultiModalModel
+from multimodal_models import MultiModalModel, NetVLADModel
 
 from metrics import average_mAP, postprocess_predictions
 from data import LabelDecoder
@@ -69,7 +69,7 @@ class LitModel(pl.LightningModule):
         elif isinstance(self.model, PositionTransformer):
             positions = input["positions"]
             return self.model(positions)
-        elif isinstance(self.model, MultiModalModel):
+        elif isinstance(self.model, (MultiModalModel, NetVLADModel)):
             return self.model(input)
         else:
            print(f"Unknown model type {type(self.model)}")
