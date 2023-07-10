@@ -52,6 +52,8 @@ class LitModel(pl.LightningModule):
             frame_idx = [],
             match_numbers = [],
             action_idx = [],
+            label_offsets=[],
+            loss=[]
         )
         self.val_loss = []
         self.train_loss = []
@@ -128,12 +130,13 @@ class LitModel(pl.LightningModule):
             loss = self.loss_func(y, y_reg, targets, offsets)
         else:
             loss = self.loss_func(y, targets, offsets)
+        log_loss = torch.nn.functional.cross_entropy(y, targets, label_smoothing=0.1, reduction='none')
         self.log("val/batch_loss", loss.mean())
 
         self.val_accuracy.update(y, targets)
         self.weighted_val_accuracy.update(y, targets)
         preds = y.detach().cpu()
-
+        print(log_loss, offsets)
         # save for validation metrics
         self.cache.update(
             predictions=preds.argmax(-1),
@@ -141,7 +144,9 @@ class LitModel(pl.LightningModule):
             ground_truths=targets,
             frame_idx=batch["frame_idx"],
             match_numbers=batch["match_number"],
-            action_idx=batch["label_idx"]
+            action_idx=batch["label_idx"],
+            label_offsets=offsets,
+            loss=log_loss
         )
 
         self.val_loss.append(loss.detach().cpu().item())
