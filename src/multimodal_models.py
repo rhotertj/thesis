@@ -4,6 +4,7 @@ from pooling import NetVLAD
 from video_models import make_kinetics_mvit
 from graph_models import GAT, GIN, PositionTransformer
 from heads import create_default_head, BasicTwinHead
+import pytorchvideo
 
 
 class NetVLADModel(torch.nn.Module):
@@ -27,6 +28,8 @@ class NetVLADModel(torch.nn.Module):
         self.load_representation_model(model_ckpt)
 
         dim_h = model_params["dim_h"]
+
+        self.linear = torch.nn.Linear(dim_h * num_clusters, dim_h)
         
         self.vlad = NetVLAD(
             num_clusters=num_clusters,
@@ -62,11 +65,14 @@ class NetVLADModel(torch.nn.Module):
     def forward(self, x):
         if isinstance(self.representation_model, PositionTransformer):
             repr = self.representation_model(x["positions"])
-        repr_dim = repr.shape[-1]
+        elif isinstance(self.representation_model, pytorchvideo.models.vision_transformers.MultiscaleVisionTransformers):
+            repr = self.representation_model(x["frames"])
         vlad = self.vlad(repr)
         # vlad flattens residuals of representation to [B, clusters * dim]
         # to compute mean over residuals, we unflatten to [B, dim, cluster]
-        repr = torch.unflatten(vlad, -1, (repr_dim, -1)).mean(-1)
+        # repr_dim = repr.shape[-1]
+        # repr = torch.unflatten(vlad, -1, (repr_dim, -1)).mean(-1)
+        repr = self.linear(vlad)
         return self.head(repr)
 
 
@@ -230,7 +236,6 @@ if "__main__" == __name__:
             # "readout": "mean",
             "input_operation": "linear",
             "num_heads": 8,
-            "batch_size": 8
         },
         model_ckpt="/nfs/home/rhotertj/Code/thesis/experiments/posT/train/dutiful-universe-204/epoch=20-val_acc=0.83.ckpt",
         num_classes=3,
