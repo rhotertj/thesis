@@ -136,7 +136,6 @@ class LitModel(pl.LightningModule):
         self.val_accuracy.update(y, targets)
         self.weighted_val_accuracy.update(y, targets)
         preds = y.detach().cpu()
-        print(log_loss, offsets)
         # save for validation metrics
         self.cache.update(
             predictions=preds.argmax(-1),

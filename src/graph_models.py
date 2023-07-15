@@ -47,6 +47,7 @@ class GAT(torch.nn.Module):
         self.gat_layers = nn.ModuleList(self.gat_layers)
         self.readout = readout
         self.relu = torch.nn.ReLU()
+        self.batch_norm = nn.BatchNorm1d((dim_h))
         self.head = create_default_head(input_dim=dim_h, output_dim=num_classes, activation=self.relu, dropout=0.3)
         
 
@@ -55,8 +56,9 @@ class GAT(torch.nn.Module):
         # graph attention
         for layer in self.gat_layers:
             h = layer(g, h)
-            h = self.relu(h)
             h = self.pool(h)
+            h = self.batch_norm(h)
+            h = self.relu(h)
         # readout function (handles batched graph)
         g.ndata["h"] = h
         h = dgl.readout_nodes(g, "h", op=self.readout)
@@ -91,13 +93,13 @@ class GIN(nn.Module):
         learn_eps,
         batch_size,
         input_operation,
+        num_layers
     ):
         super().__init__()
 
         self.input_layer = InputLayer(dim_in, dim_h, op=input_operation, batch_size=batch_size)
         self.ginlayers = nn.ModuleList()
         self.batch_norms = nn.ModuleList()
-        num_layers = 5
         
         for i in range(num_layers - 1):
             if i==0:
@@ -313,13 +315,14 @@ if __name__ == "__main__":
 
     basic_transforms = t.Compose([
             mmt.FrameSequenceToTensor(),
-            mmt.Resize(size=(224,224))
+            mmt.Resize(size=(224,224)),
+            mmt.Shuffle()
             ])
 
-    collate_fn_flat = collate_function_builder(7, True, None, "flattened")
+    collate_fn_flat = collate_function_builder(7, True, None, "flattened", relative_positions=False, team_indicator=True)
     collate_fn_graph = collate_function_builder(7, True, None, "graph_per_timestep")
 
-    dataset = MultiModalHblDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", 16, sampling_rate=4, transforms=basic_transforms, overlap=False, load_frames=False)
+    dataset = MultiModalHblDataset("/nfs/home/rhotertj/datasets/hbl/meta3d.csv", 16, sampling_rate=2, transforms=basic_transforms, overlap=False, load_frames=False)
 
     instances = []
     for i in range(bs):
@@ -329,12 +332,12 @@ if __name__ == "__main__":
     flat_batch = collate_fn_flat(instances)
     graph_batch = collate_fn_graph(instances)
 
-    #model = PositionTransformer(49, 128, 3, "linear", batch_size=8, num_heads=8)
-    #print(flat_batch["positions"].shape)
-    #print(model(flat_batch["positions"]))
+    model = PositionTransformer(49, 128, 3, "linear", batch_size=8, num_heads=8)
+    print(flat_batch["positions"].shape)
+    print(model(flat_batch["positions"]))
 
-    print(graph_batch["positions"].ndata["positions"].shape)
-    gmodel = GCN(4, 64, 3, "linear", bs, "mean", 8, True)
-    #gmodel = GCN(49, 128, 3, "linear", bs, "mean", 8, True, False)
-    print(gmodel(graph_batch["positions"], graph_batch["positions"].ndata["positions"]))
+    # print(graph_batch["positions"].ndata["positions"].shape)
+    # gmodel = GCN(4, 64, 3, "linear", bs, "mean", 8, True)
+    # #gmodel = GCN(49, 128, 3, "linear", bs, "mean", 8, True, False)
+    # print(gmodel(graph_batch["positions"], graph_batch["positions"].ndata["positions"]))
     
