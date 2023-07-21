@@ -32,7 +32,7 @@ def get_proportions_df(
 
     return pd.DataFrame(proportions)
 
-def draw_trajectory(positions: PositionContainer, ax=None):
+def draw_trajectory(positions: PositionContainer, ax=None, colors = None):
     """Plots player and ball positions as a scatterplot.
     Positions of the past become transparent.
 
@@ -53,8 +53,8 @@ def draw_trajectory(positions: PositionContainer, ax=None):
     # plot config
     # plt.xlim(0, 40)
     # plt.ylim(0, 20)
-
-    colors = ["red", "green", "blue"]
+    if colors is None:
+        colors = ["red", "green", "blue"]
     for i, pos in enumerate([team_a, team_b, ball]):
         for t in range(T):
             for agent in range(pos.shape[1]):

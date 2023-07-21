@@ -20,7 +20,7 @@ import multimodal_transforms as mmt
 from lit_models import LitModel, weighted_cross_entropy, unweighted_cross_entropy, twin_head_loss
 from video_models import make_kinetics_mvit
 from graph_models import GAT, PositionTransformer, GIN, GCN
-from multimodal_models import MultiModalModel, NetVLADModel
+from multimodal_models import MultiModalModel, NetVLADModel, MultiModalAverage
 from lit_data import LitMultiModalHblDataset, LitResampledHblDataset
 from data import LabelDecoder
 from utils import get_proportions_df
@@ -28,7 +28,7 @@ from utils import get_proportions_df
 
 def main(conf):
     pl.seed_everything(conf.seed_everything)
-    torch.set_float32_matmul_precision("high")
+    torch.set_float32_matmul_precision("medium")
 
     logger = WandbLogger(
         **conf.logger,

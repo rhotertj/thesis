@@ -5,7 +5,7 @@ from pytorchvideo.models.head import SequencePool, create_vit_basic_head
 from heads import create_mvit_twin_head
 from pooling import NetVLAD
 
-def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str, batch_size : int):
+def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str, batch_size : int, dim_h : int = 768):
     spatial_size = 224
     temporal_size = 16
     embed_dim_mul = [[1, 2.0], [3, 2.0], [14, 2.0]]

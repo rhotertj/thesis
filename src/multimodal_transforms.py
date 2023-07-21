@@ -181,6 +181,9 @@ class Translate:
         mm_data["positions"].ball[:, :, 1] += translate_y
 
         return mm_data
+    
+    def __repr__(self) -> str:
+        return "Translate"
 
 class Shuffle:
 
@@ -190,6 +193,9 @@ class Shuffle:
     def __call__(self, mm_data) -> Any:
         mm_data["positions"].player_order = torch.randperm(mm_data["positions"].N)
         return mm_data
+    
+    def __repr__(self) -> str:
+        return "Shuffle"
 
 def normalize_video(clip, mean, std, inplace=False):
     """

@@ -76,6 +76,81 @@ class NetVLADModel(torch.nn.Module):
         return self.head(repr)
 
 
+class MultiModalAverage(torch.nn.Module):
+
+    def __init__(
+        self,
+        video_model_name: str,
+        video_model_params : dict,
+        graph_model_name : str,
+        graph_model_params : dict,
+        num_classes: int,
+        batch_size: int,
+        graph_model_ckpt: str = "",
+        video_model_ckpt: str = "",
+    ) -> None:
+        super().__init__()
+        self.video_model = eval(video_model_name)(
+            **video_model_params,
+            num_classes=num_classes,
+            batch_size=batch_size,
+            head_type="classify",
+        )
+        self.graph_model = eval(graph_model_name)(
+            num_classes=num_classes,
+            batch_size=batch_size,
+            head_type="classify",
+            **graph_model_params
+        )
+
+        if not graph_model_ckpt == "":
+            self.load_graph_model_from_ckpt(graph_model_ckpt)
+
+        if not video_model_ckpt == "":
+            self.load_video_model_from_ckpt(video_model_ckpt)
+
+    def load_graph_model_from_ckpt(self, ckpt_path : str):
+        """Pytorch Lightning saves layer weights by prepending "model" to layer names.
+        If we do not want to load checkpoints for Lightning Modules but for plain torch models, we have to shorten dict keys. 
+
+        Args:
+            ckpt_path (str): Path to checkpoint file.
+        """        
+        ckpt = torch.load(ckpt_path)
+        state_dict = {}
+        for k, v in ckpt["state_dict"].items():
+            state_dict[k.removeprefix("model.")] = v
+        self.graph_model.load_state_dict(state_dict, strict=False)
+
+    def load_video_model_from_ckpt(self, ckpt_path : str):
+        """Pytorch Lightning saves layer weights by prepending "model" to layer names.
+        If we do not want to load checkpoints for Lightning Modules but for plain torch models, we have to shorten dict keys. 
+
+        Args:
+            ckpt_path (str): Path to checkpoint file.
+        """        
+        ckpt = torch.load(ckpt_path)
+        state_dict = {}
+        for k, v in ckpt["state_dict"].items():
+            state_dict[k.removeprefix("model.")] = v
+        # do not load strict since we dont use the head
+        self.video_model.load_state_dict(state_dict, strict=False)
+
+
+    def forward(self, batch):
+        graph = batch["positions"]
+        frames = batch["frames"]
+
+        if isinstance(self.graph_model, (GIN, GAT)):
+            g_cls = self.graph_model(graph, graph.ndata["positions"])
+        elif isinstance(self.graph_model, PositionTransformer):
+            g_cls = self.graph_model(graph)
+        else:
+            raise NotImplementedError("Unknown model type", type(self.graph_model))
+
+        v_cls = self.video_model(frames)
+        
+        return (v_cls + g_cls) / 2
 
 class MultiModalModel(torch.nn.Module):
 
