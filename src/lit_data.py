@@ -231,7 +231,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
         return DataLoader(self.data_val, batch_size=self.batch_size, num_workers=4, shuffle=False, collate_fn=self.val_collate)
 
     def test_dataloader(self):
-        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=1, shuffle=False, collate_fn=self.val_collate)
+        return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=4, shuffle=False, collate_fn=self.val_collate)
 
     def predict_dataloader(self):
         return DataLoader(self.data_test, batch_size=self.batch_size, num_workers=1, shuffle=False, collate_fn=self.val_collate)

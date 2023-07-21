@@ -1,3 +1,5 @@
+from typing import Any, Optional
+from pytorch_lightning.utilities.types import STEP_OUTPUT
 import torch
 import pytorch_lightning as pl
 import pytorchvideo
@@ -44,6 +46,9 @@ class LitModel(pl.LightningModule):
         self.val_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, average=None)
         self.weighted_val_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes)
 
+        self.test_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes, average=None)
+        self.weighted_test_accuracy = tm.Accuracy(task="multiclass", threshold=0.5, num_classes=num_classes)
+
         # cache, needed from lightning v2.0.0
         self.cache = Cache(
             ground_truths = [],
@@ -57,6 +62,7 @@ class LitModel(pl.LightningModule):
         )
         self.val_loss = []
         self.train_loss = []
+        self.test_loss = []
 
     def forward(self, input):
         if isinstance(self.model, pytorchvideo.models.vision_transformers.MultiscaleVisionTransformers):
@@ -227,6 +233,122 @@ class LitModel(pl.LightningModule):
         table = wandb.Table(data=data, columns = ["seconds", "mAP"])
         wandb.log(
             {"val/average-mAP" : wandb.plot.line(table, "seconds", "mAP", title=f"mAP at different tolerances (a-mAP={np.mean(map_per_tolerance):.2})")}
+        )
+
+    def on_test_epoch_start(self) -> None:
+        self.cache.clear()
+
+        self.test_loss.clear()
+        self.weighted_test_accuracy.reset()
+        self.test_accuracy.reset()
+
+    def test_step(self, batch, batch_index):
+        targets = batch["label"]
+        offsets = batch["label_offset"]
+        y = self.forward(batch)
+
+        if isinstance(y, tuple):
+            y, y_reg = y
+            loss = self.loss_func(y, y_reg, targets, offsets)
+        else:
+            loss = self.loss_func(y, targets, offsets)
+        log_loss = torch.nn.functional.cross_entropy(y, targets, label_smoothing=0.1, reduction='none')
+        self.log("test/batch_loss", loss.mean())
+
+        self.test_accuracy.update(y, targets)
+        self.weighted_test_accuracy.update(y, targets)
+        preds = y.detach().cpu()
+        # save for test metrics
+        self.cache.update(
+            predictions=preds.argmax(-1),
+            confidences=preds,
+            ground_truths=targets,
+            frame_idx=batch["frame_idx"],
+            match_numbers=batch["match_number"],
+            action_idx=batch["label_idx"],
+            label_offsets=offsets,
+            loss=log_loss
+        )
+
+        self.test_loss.append(loss.detach().cpu().item())
+
+    def on_test_epoch_end(self) -> None:
+        acc_per_class = self.test_accuracy.compute()
+        acc = self.weighted_test_accuracy.compute()
+        self.log("test/acc", acc)
+
+        acc_dict = {f"test/acc_{n}": acc_per_class[i] for i, n in enumerate(self.class_names)}
+        self.log_dict(acc_dict)
+
+        self.log("test/loss", np.mean(self.test_loss))
+
+        self.cache.save(self.experiment_dir / "test_results.pkl")
+
+        cm = wandb.plot.confusion_matrix(
+            y_true=self.cache.get("ground_truths"),
+            preds=self.cache.get("predictions"),
+            class_names=self.class_names,
+            title="Confusion Matrix",
+        )
+
+        wandb.log({"test/conf_mat": cm})
+
+        confidences = torch.stack(self.cache.get("confidences", as_numpy=False))
+        pr = wandb.plot.pr_curve(
+            self.cache.get("ground_truths"),
+            confidences,
+            labels=self.class_names,
+            title="Precision vs. Recall per class",
+        )
+
+        wandb.log({"test/prec_rec": pr})
+
+        ground_truths = self.cache.get("ground_truths")
+        confidences = confidences.numpy()
+        frame_idx = self.cache.get("frame_idx")
+        match_numbers = self.cache.get("match_numbers")
+        action_idx = self.cache.get("action_idx")
+
+        # offset ground truth anchor positions to avoid collisions across matches
+        max_frame_magnitude = len(str(frame_idx.max()))
+        frame_offset = 10**(max_frame_magnitude + 1)
+        offset_frame_idx = frame_idx + frame_offset * match_numbers
+
+        pred_order = np.argsort(offset_frame_idx)
+        offset_frame_idx = offset_frame_idx[pred_order]
+        confidences = confidences[pred_order]
+
+        gt_anchors = []
+        gt_labels = []
+        for i, action_frame in enumerate(action_idx):
+            if action_frame == -1: # background action
+                continue
+            offset_action_frame = frame_offset * match_numbers[i] + action_frame
+            # we usually see the same actions T times
+            if offset_action_frame in gt_anchors:
+                continue
+
+            gt_labels.append(ground_truths[i])
+            gt_anchors.append(offset_action_frame)
+
+        gt_anchors = np.array(gt_anchors)
+        gt_labels = np.array(gt_labels)
+
+        gt_order = np.argsort(gt_anchors)
+        gt_anchors = gt_anchors[gt_order]
+        gt_labels = gt_labels[gt_order]
+
+
+        pred_anchors, pred_confidences = postprocess_predictions(confidences, offset_frame_idx)
+
+        fps = 29.97
+        tolerances = [fps * i for i in range(1,6)]
+        map_per_tolerance = average_mAP(pred_confidences, pred_anchors, gt_labels, gt_anchors, tolerances=tolerances)
+
+        data = [[sec, m] for (sec, m) in zip(range(1,6), map_per_tolerance)]
+        table = wandb.Table(data=data, columns = ["seconds", "mAP"])
+        wandb.log(
+            {"test/average-mAP" : wandb.plot.line(table, "seconds", "mAP", title=f"mAP at different tolerances (a-mAP={np.mean(map_per_tolerance):.2})")}
         )
 
 
