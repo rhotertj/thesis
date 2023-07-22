@@ -200,9 +200,22 @@ def predictions_from_window(window, confidences):
 
     return window_idx, confidences[window_idx]
 
-def postprocess_peaks_only(confidences, frame_numbers, height, distance, width):
+def nms_peaks(confidences, frame_numbers, height=0.5, distance=8, width=12):
+    """Non-maximum suppression. Attributes action to frame numbers given model confidences per frame. 
+    This done by treating the confidences for each class separately as a 1D signal. We find peaks in this signal according to 
+    the `height, `distance`, and `width` arguments.
+
+    Args:
+        confidences (np.ndarray): Model predictions of shape (N, C).
+        frame_numbers (np.ndarray)): The accompanying frame numbers for the confidences.
+        height (float): Minimum confidence for peaks.
+        distance (int): Minimum distance between peaks.
+        width (int): The minimum width of peaks.
+
+    """    
     maxima_idx = []
     for c in range(1, confidences.shape[-1]):
+        # 0.5 8 12
         c_idx, _ = scipy.signal.find_peaks(confidences[:, c], height=height, distance=distance, width=width)
         maxima_idx.extend(c_idx)
     anchors = frame_numbers[maxima_idx]

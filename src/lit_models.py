@@ -13,7 +13,7 @@ from video_models import make_kinetics_mvit
 from graph_models import GAT, PositionTransformer, GIN, GCN
 from multimodal_models import MultiModalModel, NetVLADModel
 
-from metrics import average_mAP, postprocess_predictions
+from metrics import average_mAP, nms_peaks
 from data import LabelDecoder
 
 
@@ -223,7 +223,7 @@ class LitModel(pl.LightningModule):
         gt_labels = gt_labels[gt_order]
 
 
-        pred_anchors, pred_confidences = postprocess_predictions(confidences, offset_frame_idx)
+        pred_anchors, pred_confidences = nms_peaks(confidences, offset_frame_idx)
 
         fps = 29.97
         tolerances = [fps * i for i in range(1,6)]
@@ -339,7 +339,7 @@ class LitModel(pl.LightningModule):
         gt_labels = gt_labels[gt_order]
 
 
-        pred_anchors, pred_confidences = postprocess_predictions(confidences, offset_frame_idx)
+        pred_anchors, pred_confidences = nms_peaks(confidences, offset_frame_idx)
 
         fps = 29.97
         tolerances = [fps * i for i in range(1,6)]
