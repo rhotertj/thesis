@@ -145,3 +145,4 @@ dataset/std*
 models
 slurm*
 dataset/analysis
+!config/experiments

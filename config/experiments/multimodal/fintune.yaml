@@ -1,0 +1,110 @@
+seed_everything: 1808
+stage: train
+logger:
+  project: thesis_experiments
+  name: mm_finetune
+
+trainer: # logger extra
+  num_nodes: 1
+  devices: 1
+  overfit_batches: false # change int of n batches to debug with n batches
+  check_val_every_n_epoch: 1
+  accumulate_grad_batches: 2
+  max_epochs: 30
+  max_steps: -1
+  max_time: null
+  limit_train_batches: null # set fraction of training data
+  limit_val_batches: null
+  limit_test_batches: null
+  log_every_n_steps: 50
+  accelerator: "gpu"
+  precision: 32
+  num_sanity_val_steps: 1
+
+data:
+  name: LitResampledHblDataset
+  params:
+    meta_path: "/nfs/home/rhotertj/datasets/hbl/"
+    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/upsampled/True/meta30_train.jsonl"
+    idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/False/overlap/True/sql_sr/16x2/mode/matches/upsampled/False/meta30_val.jsonl"
+    idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/False/overlap/False/sql_sr/16x2/mode/matches/upsampled/False/meta30_test.jsonl"
+    seq_len: 16
+    sampling_rate: 2
+    load_frames: True
+    batch_size: 16
+    epsilon : 7
+    mix_video: true
+    position_format: "flattened"
+    relative_positions: false
+    team_indicator: true
+  transforms:
+    - name: mmt.FrameSequenceToTensor
+    - name: mmt.RandomHorizontalFlipVideo
+      params:
+        p: 0.5
+    - name: mmt.TimeFirst
+    - name: mmt.ColorJitter
+      params:
+        brightness: 0.2
+        hue: 0.2
+        contrast: 0.2
+        saturation: 0.2
+    - name: mmt.ChannelFirst
+    - name: mmt.Resize
+      params:
+        size: [224, 224]
+
+model:
+  name: MultiModalModel
+  params:
+    video_model_name: make_kinetics_mvit
+    video_model_params:
+      pretrained_path: models/mvit_b_16x4.pt
+    video_model_ckpt: /nfs/home/rhotertj/Code/thesis/experiments/architecture/mvit_twin/epoch=6-val_acc=0.75.ckpt
+    graph_model_name: PositionTransformer
+    graph_model_params:
+      dim_in: 49
+      dim_h: 256
+      input_operation: "linear"
+      num_heads: 8
+    graph_model_ckpt: /nfs/home/rhotertj/Code/thesis/experiments/input_format/posiformer_indicator_shuffle_long/epoch=20-val_acc=0.84.ckpt
+    train_head_only: False
+    head_type: basic
+
+lit_model:
+  name: LitModel
+
+loss_func: unweighted_cross_entropy
+
+optimizer:
+  name: SGD
+  params:
+    lr: 0.0001
+    momentum: 0.9
+    weight_decay: 1e-4
+
+scheduler:
+  name: CosineAnnealingLR
+
+num_classes: 3
+checkpoint: null
+save_config: true
+log_proportions: true
+
+callbacks:
+  - name: ModelCheckpoint
+    params:
+      every_n_epochs: 1
+      dirpath: experiments/multimodal
+      filename: "epoch={epoch}-val_acc={val/acc:.2f}"
+      monitor: "val/acc"
+      mode: max
+      auto_insert_metric_name: False
+      save_top_k: 2
+      save_on_train_epoch_end: false # save end of val
+  - name: EarlyStopping
+    params:
+      monitor: "val/acc"
+      patience: 3
+      mode: max
+      check_on_train_epoch_end: True
