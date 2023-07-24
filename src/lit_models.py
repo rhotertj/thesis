@@ -13,7 +13,7 @@ from video_models import make_kinetics_mvit
 from graph_models import GAT, PositionTransformer, GIN, GCN
 from multimodal_models import MultiModalModel, NetVLADModel
 
-from metrics import average_mAP, nms_peaks
+from metrics import average_mAP, nms_peaks, reorder_predictions
 from data import LabelDecoder
 
 
@@ -187,47 +187,12 @@ class LitModel(pl.LightningModule):
 
         wandb.log({"val/prec_rec": pr})
 
-        ground_truths = self.cache.get("ground_truths")
-        confidences = confidences.numpy()
-        frame_idx = self.cache.get("frame_idx")
-        match_numbers = self.cache.get("match_numbers")
-        action_idx = self.cache.get("action_idx")
-
-        # offset ground truth anchor positions to avoid collisions across matches
-        max_frame_magnitude = len(str(frame_idx.max()))
-        frame_offset = 10**(max_frame_magnitude + 1)
-        offset_frame_idx = frame_idx + frame_offset * match_numbers
-
-        pred_order = np.argsort(offset_frame_idx)
-        offset_frame_idx = offset_frame_idx[pred_order]
-        confidences = confidences[pred_order]
-
-        gt_anchors = []
-        gt_labels = []
-        for i, action_frame in enumerate(action_idx):
-            if action_frame == -1: # background action
-                continue
-            offset_action_frame = frame_offset * match_numbers[i] + action_frame
-            # we usually see the same actions T times
-            if offset_action_frame in gt_anchors:
-                continue
-
-            gt_labels.append(ground_truths[i])
-            gt_anchors.append(offset_action_frame)
-
-        gt_anchors = np.array(gt_anchors)
-        gt_labels = np.array(gt_labels)
-
-        gt_order = np.argsort(gt_anchors)
-        gt_anchors = gt_anchors[gt_order]
-        gt_labels = gt_labels[gt_order]
-
-
-        pred_anchors, pred_confidences = nms_peaks(confidences, offset_frame_idx)
+        confidences, confs_frames, anchors, anchor_labels = reorder_predictions(self.cache)
+        pred_anchors, pred_confidences = nms_peaks(confidences, confs_frames)
 
         fps = 29.97
         tolerances = [fps * i for i in range(1,6)]
-        map_per_tolerance = average_mAP(pred_confidences, pred_anchors, gt_labels, gt_anchors, tolerances=tolerances)
+        map_per_tolerance = average_mAP(pred_confidences, pred_anchors, anchor_labels, anchors, tolerances=tolerances)
 
         data = [[sec, m] for (sec, m) in zip(range(1,6), map_per_tolerance)]
         table = wandb.Table(data=data, columns = ["seconds", "mAP"])
@@ -303,47 +268,12 @@ class LitModel(pl.LightningModule):
 
         wandb.log({"test/prec_rec": pr})
 
-        ground_truths = self.cache.get("ground_truths")
-        confidences = confidences.numpy()
-        frame_idx = self.cache.get("frame_idx")
-        match_numbers = self.cache.get("match_numbers")
-        action_idx = self.cache.get("action_idx")
-
-        # offset ground truth anchor positions to avoid collisions across matches
-        max_frame_magnitude = len(str(frame_idx.max()))
-        frame_offset = 10**(max_frame_magnitude + 1)
-        offset_frame_idx = frame_idx + frame_offset * match_numbers
-
-        pred_order = np.argsort(offset_frame_idx)
-        offset_frame_idx = offset_frame_idx[pred_order]
-        confidences = confidences[pred_order]
-
-        gt_anchors = []
-        gt_labels = []
-        for i, action_frame in enumerate(action_idx):
-            if action_frame == -1: # background action
-                continue
-            offset_action_frame = frame_offset * match_numbers[i] + action_frame
-            # we usually see the same actions T times
-            if offset_action_frame in gt_anchors:
-                continue
-
-            gt_labels.append(ground_truths[i])
-            gt_anchors.append(offset_action_frame)
-
-        gt_anchors = np.array(gt_anchors)
-        gt_labels = np.array(gt_labels)
-
-        gt_order = np.argsort(gt_anchors)
-        gt_anchors = gt_anchors[gt_order]
-        gt_labels = gt_labels[gt_order]
-
-
-        pred_anchors, pred_confidences = nms_peaks(confidences, offset_frame_idx)
+        confidences, confs_frames, anchors, anchor_labels = reorder_predictions(self.cache)
+        pred_anchors, pred_confidences = nms_peaks(confidences, confs_frames)
 
         fps = 29.97
         tolerances = [fps * i for i in range(1,6)]
-        map_per_tolerance = average_mAP(pred_confidences, pred_anchors, gt_labels, gt_anchors, tolerances=tolerances)
+        map_per_tolerance = average_mAP(pred_confidences, pred_anchors, anchor_labels, anchors, tolerances=tolerances)
 
         data = [[sec, m] for (sec, m) in zip(range(1,6), map_per_tolerance)]
         table = wandb.Table(data=data, columns = ["seconds", "mAP"])
