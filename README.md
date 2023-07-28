@@ -1,6 +1,9 @@
 # MultiModal Representation Learning from Video and Position Data in Team Sports
 
 -- Readme coming soon--
+
+--Work in progress-- 
+
 ## Structure
 
  * `dataset` contains preprocessing scripts for the dataset.
