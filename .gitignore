@@ -138,11 +138,11 @@ checkpoints
 .vscode
 src/archive
 img/
-dataset/occurences*
-dataset/class2frame*
-dataset/means*
-dataset/std*
+notebooks/occurences*
+notebooks/class2frame*
+notebooks/means*
+notebooks/std*
+notebooks/analysis
 models
 slurm*
-dataset/analysis
 !config/experiments
