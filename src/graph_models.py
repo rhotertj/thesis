@@ -165,7 +165,9 @@ class PositionTransformer(torch.nn.Module):
     def forward(self, x):
         y = self.input_layer(x)
         y = self.transformer(y)
-        y = y.mean(dim=1)
+        if self.head_type == "vlad":
+            return y
+        y = y.mean(dim=1) # Future work might add cls token before and gather its values here
         if not self.head_type == "pool":
             y = self.head(y)
         return y

@@ -23,7 +23,7 @@ class NetVLADModel(torch.nn.Module):
             **model_params,
             num_classes=num_classes,
             batch_size=batch_size,
-            head_type="pool",
+            head_type="vlad",
         )
         self.load_representation_model(model_ckpt)
 
@@ -318,5 +318,5 @@ if "__main__" == __name__:
         num_clusters=64
     )
 
-    print(nvmodel(batch))
+    print(nvmodel(batch).shape)
     

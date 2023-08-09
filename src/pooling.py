@@ -49,6 +49,8 @@ class NetVLAD(nn.Module):
     def forward(self, x):
         if x.ndim == 2:
             x = x.unsqueeze(-1).unsqueeze(-1)
+        if x.ndim == 3:
+            x = torch.einsum("bndc->bdcn",x.unsqueeze(-1))
         B, D = x.shape[:2]
 
         if self.normalize_input:
@@ -72,7 +74,7 @@ class NetVLAD(nn.Module):
         residual = x_expanded - centroids
         # filter residuals by cluster membership
         residual *= soft_assign.unsqueeze(2) # [b, c, dim, 1] = [b, c, dim, 1] * [b, c, 1, 1]
-        vlad = residual.sum(dim=-1) # sum over last dim (which is 1?) -> [b,c,d]
+        vlad = residual.sum(dim=-1) # sum over last dim (which is 1 for 1 feature vector) -> [b,c,d]
 
         vlad = F.normalize(vlad, p=2, dim=2)  # intra-normalization
         vlad = vlad.view(x.size(0), -1)  # flatten [b, c*d]

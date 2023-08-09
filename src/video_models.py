@@ -51,6 +51,8 @@ def make_kinetics_mvit(pretrained_path : str, num_classes : int, head_type : str
             activation=F.relu,
             dropout=0.5
         )
+    elif head_type == "vlad":
+        new_head = torch.nn.Identity()
     else:
         raise NotImplementedError(f"Unknown head type {head_type}")
     
