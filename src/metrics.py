@@ -174,7 +174,7 @@ def nms_peaks(confidences, frame_numbers, height=0.5, distance=8, width=12):
 if __name__ == "__main__":
     from lit_models import Cache
 
-    val_res_name = "/nfs/home/rhotertj/Code/thesis/experiments/input_format/posiformer_indicator_shuffle_long/test_results.pkl"
+    val_res_name = "/nfs/home/rhotertj/Code/thesis/experiments/multimodal/mm_finetune/test_results.pkl"
 
     cache = Cache()
     cache.load(val_res_name)
@@ -187,4 +187,5 @@ if __name__ == "__main__":
     tolerances = [fps * i for i in range(1,6)]
     map_per_tolerance = average_mAP(pred_confidences, pred_anchors, anchor_labels, anchors, tolerances=tolerances)
     print(map_per_tolerance)
+    print(sum(map_per_tolerance) / len(map_per_tolerance))
     
