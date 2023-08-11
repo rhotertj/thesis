@@ -9,7 +9,7 @@ We use a Multiscale Vision Transformer for the video data and experiment with a 
 Graph Neural Networks for the position data.
 
 <p align="center">
-  <img src="img/methods.svg" width="500" title="Method Overview">
+  <img src="img/methods.svg" width="700" title="Method Overview">
 </p>
 
 ## Structure
