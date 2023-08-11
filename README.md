@@ -1,4 +1,4 @@
-# MultiModal Representation Learning from Video and Position Data in Team Sports
+# Multimodal Representation Learning from Video and Position Data in Team Sports
 
 This repository contains the code of my master thesis. We train a variety of models to solve an action recognition
 downstream task via representation learning.
@@ -8,7 +8,9 @@ the respective position data for players and ball.
 We use a Multiscale Vision Transformer for the video data and experiment with a vanilla Transformer and multiple
 Graph Neural Networks for the position data.
 
-(Deadline is the 18th of August so this repository and its README.md are work in progress!)
+<p align="center">
+  <img src="img/methods.png" width="500" title="Method Overview">
+</p>
 
 ## Structure
 
@@ -18,6 +20,7 @@ Graph Neural Networks for the position data.
  * `models` contains pre-trained models.
  * `scripts` contains scripts for preprocessing the dataset and downloading model checkpoints.
  * `src` contains all source code.
+ * `img` contains images.
 
 ## Installation
 

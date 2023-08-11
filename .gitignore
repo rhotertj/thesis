@@ -133,11 +133,13 @@ lightning_logs
 .lr_find*
 sample.json
 wandb
-experiments
+experiments/
+!experiments/.gitkeep
 checkpoints
 .vscode
 src/archive
 img/
+!img/methods.png
 notebooks/occurences*
 notebooks/class2frame*
 notebooks/means*
