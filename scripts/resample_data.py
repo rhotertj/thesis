@@ -214,15 +214,15 @@ if "__main__" == __name__:
         "-d", "--data_path", type=str, help='Path for meta data.', default=Path("/nfs/home/rhotertj/datasets/hbl")
     )
     parser.add_argument("--mode", type=str, help='Splitting criterion.', choices=['matches', 'random', 'time'])
-    parser.add_argument("--val_size", type=float, help="Split size of validation set.", default=0.15)
-    parser.add_argument("--test_size", type=float, help="Split size of test set.", default=0.15)
-    parser.add_argument("--background_size", type=float, default=0.4, help="Proportion of the background class when balancing proportions.")
+    parser.add_argument("--val_size", type=float, help="Split size of validation set. Should be between 0 and 1, default is 0.15. Ignored when split is `matches`.", default=0.15)
+    parser.add_argument("--test_size", type=float, help="Split size of test set. Should be between 0 and 1, default is 0.15.  Ignored when split is `matches`.", default=0.15)
+    parser.add_argument("--background_size", type=float, default=0.4, help="Proportion of the background class when balancing proportions. Default is 0.4.")
     parser.add_argument(
-        "--balanced", help="Whether upsampling of underrepresented classes takes place.", default=False, action='store_true'
+        "--balanced", help="Whether balancing of underrepresented classes takes place.", default=False, action='store_true'
     )
     parser.add_argument(
         '--overlap',
-        help="Whether to use overlapping sliding windows. Ignored when --balanced is True.",
+        help="Whether to use overlapping sliding windows.",
         default=False,
         action='store_true'
     )
