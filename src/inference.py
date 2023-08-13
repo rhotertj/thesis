@@ -10,6 +10,9 @@ import numpy as np
 
 def main():
     batch_size = 1
+
+    # setup models
+
     # model = make_kinetics_mvit("models/mvit_b_16x4.pt", 3, "twin", batch_size)
     # model = PositionTransformer(dim_in=49, dim_h=256, num_classes=3, input_operation="linear", batch_size=batch_size)
     # model = GAT(
@@ -45,6 +48,7 @@ def main():
     )
 
     model.eval()
+    # setup data and desired batching
     data = MultiModalHblDataset(
         meta_path="/nfs/home/rhotertj/datasets/hbl/meta3d.csv",
         seq_len=16,
@@ -61,25 +65,30 @@ def main():
 
     batch = val_collate(instances)
 
+    # trainable(!) model params
     print(sum(p.numel() for p in model.parameters() if p.requires_grad))
 
+    # move to gpu
     device = torch.device("cuda")
     model = model.to(device)
     input_g = batch["positions"].to(device)
     input_x = batch["positions"].ndata["positions"].to(device)
+
     starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
     repetitions = 300
-    timings=np.zeros((repetitions,1))
-    #GPU-WARM-UP
+    timings = np.zeros((repetitions,1))
+
+    # warm up
     for _ in range(10):
         _ = model(input_g, input_x)
-    # MEASURE PERFORMANCE
+
+    # measurements
     with torch.no_grad():
         for rep in range(repetitions):
             starter.record()
             _ = model(input_g, input_x)
             ender.record()
-            # WAIT FOR GPU SYNC
+            # wait for gpu
             torch.cuda.synchronize()
             curr_time = starter.elapsed_time(ender)
             timings[rep] = curr_time
