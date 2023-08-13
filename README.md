@@ -12,16 +12,6 @@ Graph Neural Networks for the position data.
   <img src="img/methods.svg" width="700" title="Method Overview">
 </p>
 
-## Structure
-
- * `config` contains model, dataset and training configurations.
- * `notebooks` contains jupyter notebooks to claculate metrics and visualize data and model predictions.
- * `experiments` contains checkpoints and LitModel Cache from validation and test epochs.
- * `models` contains pre-trained models.
- * `scripts` contains scripts for preprocessing the dataset and downloading model checkpoints.
- * `src` contains all source code.
- * `img` contains images.
-
 ## Installation
 
 Setup with conda:
@@ -29,13 +19,15 @@ Setup with conda:
 ```bash
 $ conda env create && conda activate thesis
 ```
-Beware, installation might take a few minutes.
+Beware, installation might take a few (more than 15) minutes.
 
-Download pretrained models:
+While you wait, you can download the pretrained models:
 
 ```
 $ ./scripts/download_models.sh
 ```
+
+Have a look in the `scripts` directory for more information regarding the data.
 
 ## Experiments
 
@@ -48,3 +40,13 @@ $ python src/main.py -f config/[CONFIG].yaml -c logger.name=overwrittenValue
 Use the `-c` argument to overwrite parameters on the command line.
 
 You can reproduce results presented in the thesis by simply running the configurations in `config/experiments`.
+
+## Structure
+
+ * `config` contains model, dataset and training configurations.
+ * `notebooks` contains jupyter notebooks to claculate metrics and visualize data and model predictions.
+ * `experiments` contains checkpoints and LitModel Cache from validation and test epochs.
+ * `models` contains pre-trained models.
+ * `scripts` contains scripts for preprocessing the dataset and downloading model checkpoints.
+ * `src` contains all source code.
+ * `img` contains images.

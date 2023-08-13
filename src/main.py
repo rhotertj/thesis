@@ -70,22 +70,22 @@ def main(conf):
     )
 
     if conf.data.transforms:
-        video_transforms = []
+        mm_transforms = []
         for transform in conf.data.transforms:
             if transform.get("params", False):
                 trans = eval(transform.name)(**transform.params)
             else:
                 trans = eval(transform.name)()
 
-            video_transforms.append(trans)
-        video_transforms = t.Compose(video_transforms)
+            mm_transforms.append(trans)
+        mm_transforms = t.Compose(mm_transforms)
     else:
-        video_transforms = None
-    print("Transforms:", video_transforms)
+        mm_transforms = None
+    print("Transforms:", mm_transforms)
 
     lit_data = eval(conf.data.name)(
         **conf.data.params,
-        video_transforms=video_transforms,
+        mm_transforms=mm_transforms,
         label_mapping=label_decoder
     )
     lit_data.setup(conf.stage)

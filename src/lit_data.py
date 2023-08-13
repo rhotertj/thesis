@@ -30,7 +30,7 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
         batch_size : int = 1,
         epsilon : int = 7,
         mix_video : bool = True,
-        video_transforms : t.Compose = None,
+        mm_transforms : t.Compose = None,
         position_format : str = "graph_per_sequence",
         relative_positions: bool = False,
         team_indicator : bool = True,
@@ -52,7 +52,7 @@ class LitMultiModalHblDataset(pl.LightningDataModule):
             mmt.Resize(size=(224,224))
             ])
 
-        self.train_transforms = video_transforms if video_transforms else self.val_transforms
+        self.train_transforms = mm_transforms if mm_transforms else self.val_transforms
 
 
         if mix_video:
@@ -144,7 +144,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
         batch_size : int = 1,
         epsilon : int = 7,
         mix_video : bool = True,
-        video_transforms : t.Compose = None,
+        mm_transforms : t.Compose = None,
         position_format : str = "graph_per_sequence",
         relative_positions: bool = False,
         team_indicator : bool = True,
@@ -166,7 +166,7 @@ class LitResampledHblDataset(pl.LightningDataModule):
             mmt.Resize(size=(224,224))
             ])
 
-        self.train_transforms = video_transforms if video_transforms else self.val_transforms           
+        self.train_transforms = mm_transforms if mm_transforms else self.val_transforms           
 
         if mix_video:
             video_transform = ptvt.MixVideo(num_classes=label_mapping.num_classes, mixup_alpha=0.8, cutmix_prob=0)
