@@ -232,21 +232,6 @@ class MultiModalHblDataset(Dataset):
         self.load_frames = old_setting
         return labels
 
-    def export_json(self, idx):
-        """Generate trajectory in json format for internal visualization tool.
-        """
-        positions = self[idx]["positions"]
-        team_a = positions[:, :7].tolist()
-        team_b = positions[:, 7:14].tolist()
-        ball = positions[:, 14].tolist()
-
-        jd = {}
-        jd["team_a"] = team_a
-        jd["team_b"] = team_b
-        jd["balls"] = ball
-        return jd
-
-
 class ResampledHblDataset(Dataset):
 
     def __init__(
@@ -438,21 +423,6 @@ class ResampledHblDataset(Dataset):
         print("Labels", labels)
         print("Value counts:", self.idx_to_frame_number.value_counts(["class_coarse"]))
         return labels
-
-    def export_json(self, idx):
-        """Generate trajectory in json format for internal visualization tool.
-        """
-        positions = self[idx]["positions"]
-        team_a = positions[:, :7].tolist()
-        team_b = positions[:, 7:14].tolist()
-        ball = positions[:, 14].tolist()
-
-        jd = {}
-        jd["team_a"] = team_a
-        jd["team_b"] = team_b
-        jd["balls"] = ball
-        return jd
-
 
 if "__main__" == __name__:
     data = MultiModalHblDataset(

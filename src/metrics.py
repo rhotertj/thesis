@@ -163,7 +163,6 @@ def nms_peaks(confidences, frame_numbers, height=0.5, distance=8, width=12):
     """    
     maxima_idx = []
     for c in range(1, confidences.shape[-1]):
-        # 0.5 8 12
         c_idx, _ = scipy.signal.find_peaks(confidences[:, c], height=height, distance=distance, width=width)
         maxima_idx.extend(c_idx)
     anchors = frame_numbers[maxima_idx]

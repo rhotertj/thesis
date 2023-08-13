@@ -139,12 +139,13 @@ checkpoints
 .vscode
 src/archive
 img/
-!img/methods.png
+!img/methods*
 notebooks/occurences*
 notebooks/class2frame*
 notebooks/means*
 notebooks/std*
 notebooks/analysis
+notebooks/csv
 models
 slurm*
 !config/experiments
