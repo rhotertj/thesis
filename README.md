@@ -20,6 +20,7 @@ Setup with conda:
 $ conda env create && conda activate thesis
 ```
 Beware, installation might take a few (more than 15) minutes.
+Consider passing `-f exact_environment.yml` in case newer versions of dependencies do not work.
 
 While you wait, you can download the pretrained models:
 
@@ -40,6 +41,7 @@ $ python src/main.py -f config/[CONFIG].yaml -c logger.name=overwrittenValue
 Use the `-c` argument to overwrite parameters on the command line.
 
 You can reproduce results presented in the thesis by simply running the configurations in `config/experiments`.
+Make sure to change the paths according to your data locations.
 
 ## Structure
 
