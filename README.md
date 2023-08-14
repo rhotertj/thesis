@@ -27,7 +27,7 @@ While you wait, you can download the pretrained models:
 $ ./scripts/download_models.sh
 ```
 
-Have a look in the `scripts` directory for more information regarding the data.
+Have a look at [`DATASET.md`](DATASET.md) for more information regarding the data.
 
 ## Experiments
 
