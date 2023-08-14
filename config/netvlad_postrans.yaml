@@ -8,7 +8,7 @@ trainer: # logger extra
   devices: 1
   overfit_batches: false # change int of n batches to debug with n batches
   check_val_every_n_epoch: 1
-  accumulate_grad_batches: 1
+  accumulate_grad_batches: 2
   max_epochs: 100
   max_steps: -1
   max_time: null
@@ -38,13 +38,16 @@ data:
   transforms: null
 
 model:
-  name: PositionTransformer
+  name: NetVLADModel
   params:
-    dim_in: 49
-    dim_h: 256
-    input_operation: "linear"
-    num_heads: 8
-    head_type: classify
+    model_name: PositionTransformer
+    model_params:
+      dim_in: 49
+      dim_h: 256
+      input_operation: "linear"
+      num_heads: 8
+    model_ckpt: /nfs/home/rhotertj/Code/thesis/experiments/posT/train/dutiful-universe-204/epoch=20-val_acc=0.83.ckpt
+    num_clusters: 16 
 
 
 lit_model:
@@ -82,6 +85,6 @@ callbacks:
   - name: EarlyStopping
     params:
       monitor: "val/acc"
-      patience: 5
+      patience: 3
       mode: max
       check_on_train_epoch_end: True

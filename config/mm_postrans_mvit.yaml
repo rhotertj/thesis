@@ -24,9 +24,9 @@ data:
   name: LitResampledHblDataset
   params:
     meta_path: "/nfs/home/rhotertj/datasets/hbl/"
-    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/False/overlap/True/sql_sr/16x2/mode/matches/upsampled/False/meta30_train.jsonl"
+    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/upsampled/True/meta30_train.jsonl"
     idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/False/overlap/True/sql_sr/16x2/mode/matches/upsampled/False/meta30_val.jsonl"
-    idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/False/overlap/True/sql_sr/16x2/mode/matches/upsampled/False/meta30_test.jsonl"
+    idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/False/sql_sr/16x2/mode/matches/upsampled/True/meta30_test.jsonl"
     seq_len: 16
     sampling_rate: 2
     load_frames: true
@@ -36,12 +36,12 @@ data:
     position_format: "flattened"
     relative_positions: true
   transforms:
-    - name: vt.FrameSequenceToTensor
-    - name: vt.RandomHorizontalFlipVideo
+    - name: mmt.FrameSequenceToTensor
+    - name: mmt.RandomHorizontalFlipVideo
       params:
         p: 0.5
-    - name: vt.TimeFirst
-    - name: t.ColorJitter
+    - name: mmt.TimeFirst
+    - name: mmt.ColorJitter
       params:
         brightness: 0.2
         hue: 0.2
@@ -52,8 +52,8 @@ data:
     #     num_layers: 3
     #     prob: 0.5
     #     magnitude: 5
-    - name: vt.ChannelFirst
-    - name: t.Resize
+    - name: mmt.ChannelFirst
+    - name: mmt.Resize
       params:
         size: [224, 224]
 
@@ -64,14 +64,14 @@ model:
     video_model_params:
       pretrained_path: models/mvit_b_16x4.pt
       netvlad_clusters: 0
-    video_model_ckpt: /nfs/home/rhotertj/Code/thesis/experiments/mvit/train/blooming-hill-271/epoch=6-val_acc=0.85.ckpt
+    video_model_ckpt: /nfs/home/rhotertj/Code/thesis/experiments/mvit/train/fiery-frost-281/epoch=10-val_acc=0.81.ckpt
     graph_model_name: PositionTransformer
     graph_model_params:
       dim_in: 49
       dim_h: 256
       input_operation: "linear"
       num_heads: 8
-    graph_model_ckpt: /nfs/home/rhotertj/Code/thesis/experiments/posT/train/stellar-commander-188/epoch=12-val_acc=0.63.ckpt
+    graph_model_ckpt: /nfs/home/rhotertj/Code/thesis/experiments/posT/train/dutiful-universe-204/epoch=20-val_acc=0.83.ckpt
     train_head_only: False
     head_type: basic
 
@@ -83,7 +83,7 @@ loss_func: unweighted_cross_entropy
 optimizer:
   name: SGD
   params:
-    lr: 0.003
+    lr: 0.0001
     momentum: 0.9
     weight_decay: 1e-4
 

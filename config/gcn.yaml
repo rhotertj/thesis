@@ -12,7 +12,7 @@ trainer: # logger extra
   max_epochs: 50
   max_steps: -1
   max_time: null
-  limit_train_batches: null # set fraction of training data
+  limit_train_batches: 0.05 # set fraction of training data
   limit_val_batches: null
   limit_test_batches: null
   log_every_n_steps: 50
@@ -24,17 +24,17 @@ data:
   name: LitResampledHblDataset
   params:
     meta_path: "/nfs/home/rhotertj/datasets/hbl/"
-    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/False/sql_sr/16x2/mode/matches/upsampled/False/meta30_train.jsonl"
-    idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/False/sql_sr/16x2/mode/matches/upsampled/False/meta30_val.jsonl"
+    idx_mapping_train: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/True/sql_sr/16x2/mode/matches/upsampled/True/meta30_train.jsonl"
+    idx_mapping_val: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/False/overlap/False/sql_sr/16x2/mode/matches/upsampled/False/meta30_val.jsonl"
     idx_mapping_test: "/nfs/home/rhotertj/datasets/hbl/resampled/balanced/True/overlap/False/sql_sr/16x2/mode/matches/upsampled/False/meta30_test.jsonl"
     seq_len: 16
     sampling_rate: 2
     load_frames: false
     batch_size: 1
     mix_video: false
-    epsilon : 7
+    epsilon : 6
     position_format: graph_per_timestep
-    relative_positions: true
+    relative_positions: False
   transforms: null
 
 model:
@@ -43,10 +43,10 @@ model:
     dim_in: 4
     dim_h: 64
     readout: "mean"
-    input_operation: "raw"
+    input_operation: "linear"
     num_heads: 8
     use_head: true
-
+    temporal_pooling: true
 lit_model:
   name: LitModel
 
