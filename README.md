@@ -1,12 +1,23 @@
 # Multimodal Representation Learning from Video and Position Data in Team Sports
 
-This repository contains the code of my master thesis. We train a variety of models to solve an action recognition
-downstream task via representation learning.
-In particular, we recognize shots and passes in video broadcast material of the German Handball Bundesliga and
-the respective position data for players and ball.
+#### Abstract
+*Data-driven methods have become increasingly important for sports analysis, including the*
+*assessment of player and team performance. So far, related work has focused on solving tasks*
+*solely on a single data domain, i.e., player position or video data, whereas the strengths of*
+*combining multiple modalities remain mostly unexplored. Moreover, approaches using position*
+*data have task-specific architectures and rely on handcrafted features. This thesis aims*
+*to learn latent representations for video and position data, which can be utilized to solve other*
+*downstream tasks without training from scratch or modifying the networks architecture. Since*
+*actions like shots and passes fundamentally characterize a match, we use action recognition*
+*as a pretraining task. We reproduce state-of-the-art results from the SoccerNet action spotting*
+*challenge for our video data and explore the ability of a Transformer and Graph Neural*
+*Networks for learning a representation of raw position data. Finally, we present a multimodal*
+*variant that significantly outperforms the unimodal approaches in recognizing actions*
+*as well as the downstream task of action spotting. Experiments are performed on unedited*
+*broadcast video material and corresponding synchronized position data of 25 halves from the*
+*German Handball Bundesliga.*
 
-We use a Multiscale Vision Transformer for the video data and experiment with a vanilla Transformer and multiple
-Graph Neural Networks for the position data.
+## Method Overview
 
 <p align="center">
   <img src="img/methods.svg" width="700" title="Method Overview">
